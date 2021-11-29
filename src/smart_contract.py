@@ -11,8 +11,8 @@ class Constants:
     amountPayment     = Bytes("amountPayment")
     amountASA         = Bytes("amountASA")
     approveTransfer   = Bytes("approveTransfer")
-    setupTransfer     = Bytes("setupTransfer")
-    payASA            = Bytes("payASA")
+    setupSale         = Bytes("setupSale")
+    buyASA            = Bytes("buyASA")
     executeTransfer   = Bytes("executeTransfer")
     royaltyFee        = Bytes("royaltyFee")
     claimFees         = Bytes("claimFees")
@@ -143,13 +143,13 @@ def approval_program():
 
     # [Step 2] Sequence that sets up the sale of an ASA
     # There should be 3 arguments: 
-    #   1. The first argument is the command to execute, in this case "setupTransfer"
+    #   1. The first argument is the command to execute, in this case "setupSale"
     #   2. The second one is the payment amount
     #   3. The third one is the amount of ASA transfered
     # We first verify the the seller has enough ASA to sell, and then we locally save the arguments
     priceArg = Btoi(Txn.application_args[1])
     amountOfASAArg = Btoi(Txn.application_args[2])
-    setupTransfer = Seq([
+    setupSale = Seq([
         Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
         Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
         Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
@@ -168,7 +168,7 @@ def approval_program():
     # [Step 3] Sequence that approves the payment for the ASA
     # This step requires 2 transaction.
     # The first transaction is a NoOp App call transaction. There should be 3 arguments: 
-    #   1. The first argument is the command to execute, in this case "payASA"
+    #   1. The first argument is the command to execute, in this case "buyASA"
     #   2. The second argument is the asset id
     #   3. The third argument is the amount of ASA to buy
     # Moreover, in the first transaction we also pass the seller's address
@@ -180,7 +180,7 @@ def approval_program():
     amountAssetToBeTransfered = App.localGet(seller, Constants.amountASA)                     # Amount of ASA
     approval = App.localGet(seller, Constants.approveTransfer)                                # Variable that checks if the transfer has alraedy been approved
     buyer = Gtxn[0].sender()
-    payASA = Seq([
+    buyASA = Seq([
         Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 3 arguments
         Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
         Assert(Gtxn[1].type_enum() == TxnType.Payment),                                       # Check that the second transaction is a payment
@@ -256,10 +256,10 @@ def approval_program():
     # onCall Sequence
     # Checks that the first transaction is an Application call, and then checks
     # the first argument on the call. The first argument must be a valid value between
-    # "setupTransfer", "payASA", "executeTransfer", "refund" and "claimFees"
+    # "setupSale", "buyASA", "executeTransfer", "refund" and "claimFees"
     onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())                        \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.setupTransfer).Then(setupTransfer)      \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.payASA).Then(payASA)                    \
+             .ElseIf(Gtxn[0].application_args[0] == Constants.setupSale).Then(setupSale)      \
+             .ElseIf(Gtxn[0].application_args[0] == Constants.buyASA).Then(buyASA)                    \
              .ElseIf(Gtxn[0].application_args[0] == Constants.executeTransfer).Then(executeTransfer)  \
              .ElseIf(Gtxn[0].application_args[0] == Constants.refund).Then(refund)                    \
              .ElseIf(Gtxn[0].application_args[0] == Constants.claimFees).Then(claimFees)              \
