@@ -6,18 +6,18 @@ class Constants:
     """
         Constant strings used in the smart contracts
     """
-    Creator           = Bytes("Creator")
-    AssetId           = Bytes("AssetId")
-    amountPayment     = Bytes("amountPayment")
-    amountASA         = Bytes("amountASA")
-    approveTransfer   = Bytes("approveTransfer")
-    setupSale         = Bytes("setupSale")
-    buyASA            = Bytes("buyASA")
-    executeTransfer   = Bytes("executeTransfer")
-    royaltyFee        = Bytes("royaltyFee")
-    claimFees         = Bytes("claimFees")
-    collectedFees     = Bytes("collectedFees")
-    refund            = Bytes("refund")
+    Creator           = Bytes("Creator")               # Identified the account of the Asset creator, stored globally
+    AssetId           = Bytes("AssetId")               # ID of the asset, stored globally
+    amountPayment     = Bytes("amountPayment")         # Amount to be paid for the asset, stored locally on the seller's account
+    amountASA         = Bytes("amountASA")             # Amount of asset sold, stored locally on the seller's account
+    approveTransfer   = Bytes("approveTransfer")       # Approval variable, stored on the seller's and the buyer's accounts
+    setupSale         = Bytes("setupSale")             # Method call
+    buyASA            = Bytes("buyASA")                # Method call
+    executeTransfer   = Bytes("executeTransfer")       # Method call
+    royaltyFee        = Bytes("royaltyFee")            # Royalty fee in thousands
+    claimFees         = Bytes("claimFees")             # Method call
+    collectedFees     = Bytes("collectedFees")         # Amount of collected fees, stored globally
+    refund            = Bytes("refund")                # Method call
 
 
 
@@ -250,15 +250,16 @@ def approval_program():
         Assert(Txn.sender() == App.globalGet(Constants.Creator)),                              # Verify that the sender is the creator
         Assert(App.globalGet(Constants.collectedFees) > Int(0)),                               # Check that there are enough fees to collect
         sendPayment(App.globalGet(Constants.Creator), App.globalGet(Constants.collectedFees)), # Pay creator
+        App.globalPut(Constants.collectedFees, Int(0)),                                        # Reset collected fees
         Approve()
     ])
     
     # onCall Sequence
     # Checks that the first transaction is an Application call, and then checks
-    # the first argument on the call. The first argument must be a valid value between
+    # the first argument of the call. The first argument must be a valid value between
     # "setupSale", "buyASA", "executeTransfer", "refund" and "claimFees"
     onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())                        \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.setupSale).Then(setupSale)      \
+             .ElseIf(Gtxn[0].application_args[0] == Constants.setupSale).Then(setupSale)              \
              .ElseIf(Gtxn[0].application_args[0] == Constants.buyASA).Then(buyASA)                    \
              .ElseIf(Gtxn[0].application_args[0] == Constants.executeTransfer).Then(executeTransfer)  \
              .ElseIf(Gtxn[0].application_args[0] == Constants.refund).Then(refund)                    \
