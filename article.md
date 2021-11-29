@@ -5,6 +5,20 @@ The smart contract has been written in PyTeal, and all the examples are written 
 We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
 
 
+## 0. Requirements
+We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
+
+Other requirements:
+
+
+1. Have a running [Algorand node](https://developer.algorand.org/docs/run-a-node/setup/install), or [use the sandbox](https://github.com/algorand/sandbox)
+2. Having PyTeal installed (requires python 3)
+3. Install [Node-js](https://nodejs.org/) for the examples, together with the ``algosdk`` library, ``typescript`` and ``ts-node``
+
+Please, check [README file](https://github.com/rssalessio/algorand-royalty-fees/blob/main/README.md) for more instructions.
+
+
+
 ## 1. Introduction
 **Royalty Fees play a huge role in the future of Blockchains, since they enable the possibility of guaranteeing fees  on second sales of an asset.** Unfortunately, Royalty Fees are yet not fully implemented on Blokchains. 
 
@@ -109,7 +123,7 @@ onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())      
          .ElseIf(Gtxn[0].application_args[0] == Constants.claimFees).Then(claimFees)              \
          .Else(Reject())
 ````
-First, we check that the user called the smart contract correctly. Then we check the first argument of the ``ApplicationCall``. As you can see in the code there is a list of ``ElseIf`` statementents that are used to distinguish between the various values. The accepted values are ``setupSale, buyASA, executeTransfer, refund, claimFees``.
+First, we check that the user called the smart contract correctly. Then we check the first argument of ``application_args`` (we use the first argument to discriminate between the various operations). As you can see in the code there is a list of ``ElseIf`` statementents that are used to distinguish between the various values. The accepted values are ``setupSale, buyASA, executeTransfer, refund, claimFees``.
 1. ``setupSale`` Can be called by any user, and it is used to set up a new sale.
 2. ``buyASA`` Any user that wants to buy the asset needs to call this method first.
 3. ``executeTransfer`` After paying, the buyer can finalize by transfering the asset to his/her wallet. Alternatively, the user can get the money back by calling the ``refund method``
@@ -121,6 +135,7 @@ Note that we obviously reject all other undefined requests.
 We will now go thorugh these 5 methods, but, before doing so, we first define some useful subroutines that will come in handy later on.
 
 ### 3.1 SetupSale method
+We begin by looking at the ``setupSale`` method. In this case the user (the seller) has to provide the sale price and the total amount of asset.
 ```python
 # [Step 2] Sequence that sets up the sale of an ASA
     # There should be 3 arguments: 
@@ -145,7 +160,15 @@ We will now go thorugh these 5 methods, but, before doing so, we first define so
         Approve()
     ])
 ```
+In the code above we start by doing some standard checks. Note that we use  the following code to check that the seller has indeed the asset available for sale
+```python
+Assert(getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId)) >=  amountOfASAArg),
+```
+where ``getAccountASABalance`` is a subRoutine that we can use to retrieve the amount of asset held by a certain wallet. We will give a look to this subroutine later in section  3.6.
+The code ends by checking that the sale price is greater than the service cost (which is 2000 microalgo in this case), and we save in the local account of the seller these variables. We also save the ``approveTransfer`` variable, and set it equal to 0.
+
 ### 3.2 BuyASA method
+
 ```python
 # [Step 3] Sequence that approves the payment for the ASA
     # This step requires 2 transaction.
@@ -243,7 +266,13 @@ We will now go thorugh these 5 methods, but, before doing so, we first define so
     ])
 ```
 ### 3.6 Subroutines
+In this section I explain some of the subroutines that appears in the code. I use 4 subroutines
+1. ``sendPayment(receiver: Addr, amount: Int) -> Expr``: this subroutines sends a payment to a specific wallet
+2. ``transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Expr``: this subroutine transfers an asset from a wallet to another (the app must be set as clawback address for the asset)
+3. ``getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64``: this subroutine is used to find the amount of asset held by a certain wallet
+4. ``computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64``: this subroutine computes the royalty fees given a certain price
 
+#### 3.6.1 SendPayment
 ```python
 @Subroutine(TealType.none)
 def sendPayment(receiver: Addr, amount: Int) -> Expr:
@@ -264,8 +293,10 @@ def sendPayment(receiver: Addr, amount: Int) -> Expr:
         }),
         InnerTxnBuilder.Submit(),
     ])
+```
 
-
+#### 3.6.2 TransferAsset
+```python
 @Subroutine(TealType.none)
 def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Expr:
     """
@@ -294,7 +325,11 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
         }),
         InnerTxnBuilder.Submit(),
     ])
+```
 
+#### 3.6.3 getAccountASABalance
+
+```python
 @Subroutine(TealType.uint64)
 def getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64:
     """
@@ -316,8 +351,9 @@ def getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64:
         .Then(AssetAccountBalance.value())           \
         .Else(Int(0))
     ])
-
-
+```
+#### 3.6.4 computeRoyaltyFee
+```python
 @Subroutine(TealType.uint64)
 def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
     """
