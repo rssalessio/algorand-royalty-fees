@@ -208,7 +208,7 @@ def approval_program():
     executeTransfer = Seq([
         Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
         Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
-        Assert(approval == Int(1)),                                                     # Check that approval is set to 1 from seller' side
+        Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),              # Check that approval is set to 1 from seller' side
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
         Assert(                                                                         # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
@@ -231,7 +231,7 @@ def approval_program():
     refund = Seq([
         Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
         Assert(Txn.application_args.length() == Int(3)),                                 # Check that there is only 1 argument
-        Assert(approval == Int(1)),                                                      # Asset that the payment has already been done
+        Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
         Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
         sendPayment(buyer, amountToBePaid - Int(1000)),                                  # Refund buyer

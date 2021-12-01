@@ -138,27 +138,27 @@ We will now go thorugh these 5 methods, but, before doing so, we first define so
 We begin by looking at the ``setupSale`` method. In this case the user (the seller) has to provide the sale price and the total amount of asset.
 ```python
 # [Step 2] Sequence that sets up the sale of an ASA
-    # There should be 3 arguments: 
-    #   1. The first argument is the command to execute, in this case "setupSale"
-    #   2. The second one is the payment amount
-    #   3. The third one is the amount of ASA transfered
-    # We first verify the the seller has enough ASA to sell, and then we locally save the arguments
-    priceArg = Btoi(Txn.application_args[1])
-    amountOfASAArg = Btoi(Txn.application_args[2])
-    setupSale = Seq([
-        Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
-        Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
-        Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
-        Assert(amountOfASAArg != Int(0)),                                                     # Check that the amount of ASA to transfer is different than 0                
-        Assert(                                                                               # Verify that the seller has enough ASA to sell
-            getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId))
-                >=  amountOfASAArg),
-        Assert(priceArg > serviceCost),                                                       # Check that the price is greater than the service cost
-        App.localPut(Txn.sender(), Constants.amountPayment, priceArg),                        # Save the price
-        App.localPut(Txn.sender(), Constants.amountASA, amountOfASAArg),                      # Save the amount of ASA to transfer
-        App.localPut(Txn.sender(), Constants.approveTransfer, Int(0)),                        # Reject transfer until payment is done
-        Approve()
-    ])
+# There should be 3 arguments: 
+#   1. The first argument is the command to execute, in this case "setupSale"
+#   2. The second one is the payment amount
+#   3. The third one is the amount of ASA transfered
+# We first verify the the seller has enough ASA to sell, and then we locally save the arguments
+priceArg = Btoi(Txn.application_args[1])
+amountOfASAArg = Btoi(Txn.application_args[2])
+setupSale = Seq([
+    Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
+    Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
+    Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
+    Assert(amountOfASAArg != Int(0)),                                                     # Check that the amount of ASA to transfer is different than 0                
+    Assert(                                                                               # Verify that the seller has enough ASA to sell
+        getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId))
+            >=  amountOfASAArg),
+    Assert(priceArg > serviceCost),                                                       # Check that the price is greater than the service cost
+    App.localPut(Txn.sender(), Constants.amountPayment, priceArg),                        # Save the price
+    App.localPut(Txn.sender(), Constants.amountASA, amountOfASAArg),                      # Save the amount of ASA to transfer
+    App.localPut(Txn.sender(), Constants.approveTransfer, Int(0)),                        # Reject transfer until payment is done
+    Approve()
+])
 ```
 In the code above we start by doing some standard checks. Note that we use  the following code to check that the seller has indeed the asset available for sale
 ```python
@@ -168,88 +168,106 @@ where ``getAccountASABalance`` is a subRoutine that we can use to retrieve the a
 The code ends by checking that the sale price is greater than the service cost (which is 2000 microalgo in this case), and we save in the local account of the seller these variables. We also save the ``approveTransfer`` variable, and set it equal to 0.
 
 ### 3.2 BuyASA method
+The next method we look at is the ``buyASA`` method. Calling this method requires 2 transaction:
+1. The first one is a NoOp application call with 3 arguments: the "buyASA" argument, the asset id and the amount of ASA to buy
+2. The second transaction is a payment (that pays the full price). The receiver is the contract itself.
+
+The code starts by loading some useful variables (the seller address, the amount to be paid, etc...) and does some standard checks. We make sure that the seller has not approved another buyer, and that the seller holds enough ASA. 
+
+If all conditions are satisfied,  we approve the transfer from both the seller's and buyer's perspectives. At this point the buyer only needs to finalize the transaction to transfer the asset.
 
 ```python
 # [Step 3] Sequence that approves the payment for the ASA
-    # This step requires 2 transaction.
-    # The first transaction is a NoOp App call transaction. There should be 3 arguments: 
-    #   1. The first argument is the command to execute, in this case "buyASA"
-    #   2. The second argument is the asset id
-    #   3. The third argument is the amount of ASA to buy
-    # Moreover, in the first transaction we also pass the seller's address
-    # The second transaction is a payment (the receiver is the app).
+# This step requires 2 transaction.
+# The first transaction is a NoOp App call transaction. There should be 3 arguments: 
+#   1. The first argument is the command to execute, in this case "buyASA"
+#   2. The second argument is the asset id
+#   3. The third argument is the amount of ASA to buy
+# Moreover, in the first transaction we also pass the seller's address
+# The second transaction is a payment (the receiver is the app).
 
-    # Save some useful variables
-    seller = Gtxn[0].accounts[1]                                                              # Save seller's address
-    amountToBePaid = App.localGet(seller, Constants.amountPayment)                            # Amount to be paid
-    amountAssetToBeTransfered = App.localGet(seller, Constants.amountASA)                     # Amount of ASA
-    approval = App.localGet(seller, Constants.approveTransfer)                                # Variable that checks if the transfer has alraedy been approved
-    buyer = Gtxn[0].sender()
-    buyASA = Seq([
-        Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 3 arguments
-        Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
-        Assert(Gtxn[1].type_enum() == TxnType.Payment),                                       # Check that the second transaction is a payment
-        Assert(App.globalGet(Constants.AssetId) == Btoi(Gtxn[0].application_args[1])),        # Check that the assetId is correct
-        Assert(approval == Int(0)),                                                           # Check that the transfer has not been issued yet
-        Assert(amountToBePaid == Gtxn[1].amount()),                                           # Check that the amount to be paid is correct
-        Assert(amountAssetToBeTransfered == Btoi(Gtxn[0].application_args[2])),               # Check that there amount of ASA to sell is correct
-        Assert(Global.current_application_address() == Gtxn[1].receiver()),                   # Check that the receiver of the payment is the App
-        Assert(                                                                               # Verify that the seller has enough ASA to sell
-            getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
-                >=  amountAssetToBeTransfered),
-        App.localPut(seller, Constants.approveTransfer, Int(1)),                              # Approve the transfer from seller' side
-        App.localPut(buyer, Constants.approveTransfer, Int(1)),                               # Approve the transfer from buyer' side
-        Approve()
-    ])
+# Save some useful variables
+seller = Gtxn[0].accounts[1]                                                              # Save seller's address
+amountToBePaid = App.localGet(seller, Constants.amountPayment)                            # Amount to be paid
+amountAssetToBeTransfered = App.localGet(seller, Constants.amountASA)                     # Amount of ASA
+approval = App.localGet(seller, Constants.approveTransfer)                                # Variable that checks if the transfer has alraedy been approved
+buyer = Gtxn[0].sender()
+buyASA = Seq([
+    Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 3 arguments
+    Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
+    Assert(Gtxn[1].type_enum() == TxnType.Payment),                                       # Check that the second transaction is a payment
+    Assert(App.globalGet(Constants.AssetId) == Btoi(Gtxn[0].application_args[1])),        # Check that the assetId is correct
+    Assert(approval == Int(0)),                                                           # Check that the transfer has not been issued yet
+    Assert(amountToBePaid == Gtxn[1].amount()),                                           # Check that the amount to be paid is correct
+    Assert(amountAssetToBeTransfered == Btoi(Gtxn[0].application_args[2])),               # Check that there amount of ASA to sell is correct
+    Assert(Global.current_application_address() == Gtxn[1].receiver()),                   # Check that the receiver of the payment is the App
+    Assert(                                                                               # Verify that the seller has enough ASA to sell
+        getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
+            >=  amountAssetToBeTransfered),
+    App.localPut(seller, Constants.approveTransfer, Int(1)),                              # Approve the transfer from seller' side
+    App.localPut(buyer, Constants.approveTransfer, Int(1)),                               # Approve the transfer from buyer' side
+    Approve()
+])
 ```
 ### 3.3 ExecuteTransfer method
+Finally, we have the sequence that finalizes the transfer. At this point the buyer is still able to get back the money, and cancel the transfer. If the buyer calls ``executeTransfer``, then the transfer is finalized. The asset is moved from the seller to the buyer, and the seller receives the payment minus the royalty fees.
+
+We use the subroutine ``computeRoyaltyFee`` to compute the royalty fee given the total payment minus the service cost.
+
+Apart from the usual checks, we also make sure that both the seller and the buyer already approved the transaction. We then transfer the asset, and send the papyment to the seller using the subroutines ``transferAsset`` and ``sendPayment``. Finally, we conclude by collecting the royalty fees for the creator and by deleting all the local variables.
 ```python
 # [Step 4] Sequence that transfers the ASA, pays the seller and sends royalty fees to the creator
-    # This step requires 1 transaction.
-    # The  transaction is a NoOp App call transaction. There should be 1 arguments
-    #   1. The first argument is the command to execute, in this case "executeTransfer"
-    # We also account for the serviceCost to pay the inner transaction
-    royaltyFee = App.globalGet(Constants.royaltyFee)
-    collectedFees = App.globalGet(Constants.collectedFees)
-    feesToBePaid = computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)
-    executeTransfer = Seq([
-        Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
-        Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
-        Assert(approval == Int(1)),                                                     # Check that approval is set to 1 from seller' side
-        Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
-        Assert(                                                                         # Verify that the seller has enough ASA to sell
-            getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
-                >=  amountAssetToBeTransfered),
-        Assert(amountToBePaid - serviceCost > feesToBePaid),
-        transferAsset(seller,                                                           # Transfer asset
-                      Gtxn[0].sender(),
-                      App.globalGet(Constants.AssetId), amountAssetToBeTransfered),
-        sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid),               # Pay seller
-        App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid),           # Collect fees, perhaps check for overflow?
-        App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
-        App.localDel(seller, Constants.amountASA),
-        App.localDel(seller, Constants.approveTransfer),
-        App.localDel(buyer, Constants.approveTransfer),
-        Approve()
-    ])
+# This step requires 1 transaction.
+# The  transaction is a NoOp App call transaction. There should be 1 arguments
+#   1. The first argument is the command to execute, in this case "executeTransfer"
+# We also account for the serviceCost to pay the inner transaction
+royaltyFee = App.globalGet(Constants.royaltyFee)
+collectedFees = App.globalGet(Constants.collectedFees)
+feesToBePaid = computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)
+executeTransfer = Seq([
+    Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
+    Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
+    Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),              # Check that approval is set to 1 from seller' side
+    Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
+    Assert(                                                                         # Verify that the seller has enough ASA to sell
+        getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
+            >=  amountAssetToBeTransfered),
+    Assert(amountToBePaid - serviceCost > feesToBePaid),
+    transferAsset(seller,                                                           # Transfer asset
+                  Gtxn[0].sender(),
+                  App.globalGet(Constants.AssetId), amountAssetToBeTransfered),
+    sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid),               # Pay seller
+    App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid),           # Collect fees, perhaps check for overflow?
+    App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
+    App.localDel(seller, Constants.amountASA),
+    App.localDel(seller, Constants.approveTransfer),
+    App.localDel(buyer, Constants.approveTransfer),
+    Approve()
+])
 ```
 ### 3.4 Refund Method
+In case the buyer has already paid, but not finalized the transaction using the ``executeTransfer`` sequence, it is still possible to claim back the funds by calling ``refund``. This sequence of code checks that the payment was done, and sends back to the buyer the total payment amount minus the transaction fee.
+
+We end by cleaning the local variables.
+
 ```python
 # Refund sequence
-    # The buyer can get a refund if the payment has already been done but the NFT has not been transferred yet
-    refund = Seq([
-        Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
-        Assert(Txn.application_args.length() == Int(3)),                                 # Check that there is only 1 argument
-        Assert(approval == Int(1)),                                                      # Asset that the payment has already been done
-        Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
-        Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
-        sendPayment(buyer, amountToBePaid - Int(1000)),                                  # Refund buyer
-        App.localPut(seller, Constants.approveTransfer, Int(0)),                         # Reset local variables
-        App.localDel(buyer, Constants.approveTransfer),
-        Approve()
-    ])
+# The buyer can get a refund if the payment has already been done but the NFT has not been transferred yet
+refund = Seq([
+    Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
+    Assert(Txn.application_args.length() == Int(3)),                                 # Check that there is only 1 argument
+    Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
+    Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
+    Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
+    sendPayment(buyer, amountToBePaid - Int(1000)),                                  # Refund buyer
+    App.localPut(seller, Constants.approveTransfer, Int(0)),                         # Reset local variables
+    App.localDel(buyer, Constants.approveTransfer),
+    Approve()
+])
 ```
 ### 3.5 claimFees Method
+Finally, we also create the ``claimFees`` method that can be called by the creator of the asset. This simply sends a payment to the creator with the collected amount of fees.
+
 ```python
 # Claim Fees sequence
     # This sequence can be called only by the creator.  It is used to claim all the royalty fees
@@ -265,6 +283,7 @@ The code ends by checking that the sale price is greater than the service cost (
         Approve()
     ])
 ```
+
 ### 3.6 Subroutines
 In this section I explain some of the subroutines that appears in the code. I use 4 subroutines
 1. ``sendPayment(receiver: Addr, amount: Int) -> Expr``: this subroutines sends a payment to a specific wallet
@@ -273,6 +292,7 @@ In this section I explain some of the subroutines that appears in the code. I us
 4. ``computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64``: this subroutine computes the royalty fees given a certain price
 
 #### 3.6.1 SendPayment
+The ``SendPayment`` subroutine can be used to pay a wallet by submitting an inner transaction. Check also the description of the subroutine in the code.
 ```python
 @Subroutine(TealType.none)
 def sendPayment(receiver: Addr, amount: Int) -> Expr:
@@ -296,6 +316,7 @@ def sendPayment(receiver: Addr, amount: Int) -> Expr:
 ```
 
 #### 3.6.2 TransferAsset
+The ``TransferAsset`` subroutine can be used to transfer the asset being sold from one account to another using an inner transaction (note that the contract must be the clawback address for that asset).
 ```python
 @Subroutine(TealType.none)
 def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Expr:
@@ -328,6 +349,7 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
 ```
 
 #### 3.6.3 getAccountASABalance
+The ``getAccountASABalance`` can be used to get the balance of a specific asset for a specific wallet. It uses the ``AssetHolding.balance`` method to retrieve the balanace.
 
 ```python
 @Subroutine(TealType.uint64)
@@ -353,6 +375,11 @@ def getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64:
     ])
 ```
 #### 3.6.4 computeRoyaltyFee
+Last, but not least, we have the the ``computeRoyaltyFee`` subroutine. This subroutine computes the fee for a specific payment amount and a given royalty fee (in thousands). For example suppose one wants to set a royalty fee of 3.5%. In thousands is 35 (0.035 * 1000).
+
+Given an amount ``x`` we need to compute ``x * 35 / 1000`` to compute the royalty fee. Since there may be a remainder, we also need to consider ``(x * 35) % 1000``. THe remainder will be used to round up the fee (if it is greater than 500 then we round up, otherwise we round down).
+
+Read also the description of the subrotuine for more information.
 ```python
 @Subroutine(TealType.uint64)
 def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
@@ -385,6 +412,15 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
            .ElseIf(remainder > Int(500)).Then(division + Int(1))           \
            .Else(division)
 ```
+### 3.7 Possible improvements and missing checks
+There ase several possible improvements that can be made. First, note that the code is not production ready since it misses some checks that are needed to guarantee safety.
+
+Secondly, the buyer may potentially pay for the asset, but never transfer it. This would freeze the total paid amount inside the contract. To solve this issue we can do the following:
+1. Impose that the executionTransfer must happen in a finite number of rounds
+2. Let the seller reset the payment if the transfer has not happened after that finite number of rounds.
+
+Alternatively, we can just transfer immediately (after the payment) the asset to the buyer, without the need of confirming the transfer.
+
 ## 4. Setting up an Example scenario
 ### 4.1 Creating the asset
 ### 4.2 Creating the App
