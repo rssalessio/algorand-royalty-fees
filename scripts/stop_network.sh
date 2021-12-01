@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 echo -e "\e[1;31mStopping network...\e[0m"
 
 SCRIPTS_PATH="$(dirname "$0")"

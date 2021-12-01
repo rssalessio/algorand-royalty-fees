@@ -1,8 +1,8 @@
 #!/bin/bash
-set -e
 
-SCRIPTS_PATH="$(dirname "$0")"
-NETWORK_FOLDER="$SCRIPTS_PATH/network_data"
+
+SCRIPTS_PATH="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+export NETWORK_FOLDER="$SCRIPTS_PATH/network_data"
 echo -e "\e[1;31mStarting network \e[0m"
 
 if [ -d "$NETWORK_FOLDER" ]; then
@@ -24,6 +24,12 @@ echo '{
 
 goal network start -r $NETWORK_FOLDER
 goal network status -r $NETWORK_FOLDER
+
+export TEST_ALGOD_TOKEN="$(cat $NETWORK_FOLDER/Node1/algod.token)"
+export TEST_ALGOD_SERVER="http://$(cat $NETWORK_FOLDER/Node1/algod.net | awk '{split($0,a,":"); print a[1]}')"
+export TEST_ALGOD_PORT="$(cat $NETWORK_FOLDER/Node1/algod.net | awk '{split($0,a,":"); print a[2]}')"
+
+
 NODE1_ADDRESS=$(goal account list -d $NETWORK_FOLDER/Node1 | awk '{print $2}')
 
 
@@ -47,4 +53,3 @@ goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET2_ADDR -d $NETWORK_FOLD
 goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET3_ADDR -d $NETWORK_FOLDER/Node1 -N
 
 echo -e "\e[1;31mNetwork created\e[0m"
-set +e
