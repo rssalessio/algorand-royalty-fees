@@ -255,7 +255,7 @@ We end by cleaning the local variables.
 # The buyer can get a refund if the payment has already been done but the NFT has not been transferred yet
 refund = Seq([
     Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
-    Assert(Txn.application_args.length() == Int(3)),                                 # Check that there is only 1 argument
+    Assert(Txn.application_args.length() == Int(1)),                                 # Check that there is only 1 argument
     Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
     Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
     Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
@@ -505,8 +505,8 @@ goal app optin --app-id $APP_ID --from $WALLET3_ADDR
 
 ### 4.3 Simulate sale from ``wallet1`` to ``wallet2``
 Here we simulate the sale from ``wallet1`` to ``wallet2``. 
-1. We first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. We must pass 3 arguments: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` command.
-2. 
+
+We first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. We must pass 3 arguments: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` command.
 
 
 ```console
@@ -514,6 +514,39 @@ NFT_AMOUNT=1
 NFT_PRICE=1000000
 goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
 ```
+
+Now we pay the contract using ``wallet2``. We need to make a group transaction:
+1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
+2. The second transaction is a payment. We pay directly the contract the total amount.
+
+
+```console
+# App call transaction
+goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:buyASA --app-arg int:$ASSET_ID --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID --app-account $WALLET1_ADDR --out txnAppCall.tx
+
+# Payment transaction
+goal clerk send --amount $NFT_PRICE --to $APP_ADDRESS --from $WALLET2_ADDR --out txnPayment.tx
+
+# Make a group transaction
+cat txnAppCall.txn txnPayment.tx > buyCombinedTxns.tx
+goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
+goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
+goal clerk rawsend -f signoutbuy.tx
+```
+Now ``wallet2`` has paid the smart contract. It can still  get a refund by calling the ``refund`` method, or finalize the transaction by calling the ``executeTransfer`` method.
+
+``wallet2`` can finalize the transaction by executing the following command
+```console
+goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:executeTransfer --app-account $WALLET1_ADDR --foreign-asset $ASSET_ID
+```
+
+
+``wallet2`` can get a refund by executing the following command (we need to specify the seller's address using the ``-app-account`` flag).
+
+```console
+goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:refund --app-account $WALLET1_ADDR
+```
+
 ### 4.4 Simulate sale from ``wallet2`` to ``wallet3``
 ### 4.5 Verify royalty fees
 

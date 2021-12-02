@@ -230,7 +230,7 @@ def approval_program():
     # The buyer can get a refund if the payment has already been done but the NFT has not been transferred yet
     refund = Seq([
         Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
-        Assert(Txn.application_args.length() == Int(3)),                                 # Check that there is only 1 argument
+        Assert(Txn.application_args.length() == Int(1)),                                 # Check that there is only 1 argument
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
         Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
