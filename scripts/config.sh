@@ -39,8 +39,8 @@ echo -e "\e[1;32mCompiling Stateful contract to TEAL\e[0m"
 echo -e "\e[1;32mDeploying stateful contract\e[0m"
 GLOBAL_BYTES_SLICES=1
 GLOBAL_INTS=3
-LOCAL_BYTES_SLICES=1
-LOCAL_INTS=5
+LOCAL_BYTES_SLICES=0
+LOCAL_INTS=3
 
 export APP_ID=$(
   ${gcmd} app create --creator "$WALLET1_ADDR" \
