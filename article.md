@@ -413,19 +413,109 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
            .Else(division)
 ```
 ### 3.7 Possible improvements and missing checks
-There ase several possible improvements that can be made. First, note that the code is not production ready since it misses some checks that are needed to guarantee safety.
+There ase several possible improvements that can be made. 
 
-Secondly, the buyer may potentially pay for the asset, but never transfer it. This would freeze the total paid amount inside the contract. To solve this issue we can do the following:
-1. Impose that the executionTransfer must happen in a finite number of rounds
-2. Let the seller reset the payment if the transfer has not happened after that finite number of rounds.
+1. First, note that the code is not production ready since it misses some checks that are needed to guarantee safety.
 
-Alternatively, we can just transfer immediately (after the payment) the asset to the buyer, without the need of confirming the transfer.
+2. Secondly, the buyer may potentially pay for the asset, but never transfer it. This would freeze the total paid amount inside the contract. To solve this issue we can do the following:
+    1. Impose that the executionTransfer must happen in a finite number of rounds
+    2. Let the seller reset the payment if the transfer has not happened after that finite number of rounds.
+
+    Alternatively, we can just transfer immediately (after the payment) the asset to the buyer, without the need of confirming the transfer.
+3. We could also send the royalty fees immediately to the creator when the asset is transferred (by using another innerTransaction).
 
 ## 4. Setting up an Example scenario
+We simulate an example scenario where we sell the asset 2 times. For this example we consider the simple scenario that the asset is an NFT.
+We need 3 wallets: 
+1. ``wallet1`` creator of the asset, and deployer of the smart contract (this is not strictly required!)
+2. ``wallet2`` First buyer
+3. ``wallet3`` Second buyer
+
+We proceed as follows
+1. We start by creating the Asset using ``wallet1``
+2. Deploy the smart contract using ``wallet1``
+3. ``wallet1`` puts the NFT up for sale and ``wallet2`` buys it
+4. ``wallet2`` puts the NFT up for sale and ``wallet3`` buys it
+5. Finally, we redeem the fees using ``wallet1``
+
 ### 4.1 Creating the asset
-### 4.2 Creating the App
-### 4.3 Simulate sales
-### 4.4 Verify royalty fees
+We start by creating the asset (note that the asset is initially frozen). In this part of the tutorial I assume that there exists a variable ``$WALLET1_ADDR`` that contains the address of ``wallet1``.
+
+We also save the asset id variable in ``$ASSET_ID`` and make ``wallet2`` and ``wallet3`` opt-in the asset.
+
+```console
+# Create the asset
+goal asset create --creator $WALLET1_ADDR --name "SpecialNFT" --unitname "SNFT" --total 1 --decimals 0 --defaultfrozen
+
+# Save the Asset ID
+export ASSET_ID="$(goal asset info --creator $WALLET1_ADDR --unitname "SNFT"  | awk '{print $3}' | head -1)"
+
+# Asset Opt in
+goal asset send --amount 0 --to $WALLET2_ADDR --assetid $ASSET_ID
+goal asset send --amount 0 --to $WALLET3_ADDR --assetid $ASSET_ID
+```
+### 4.2 Creating the App and setting the clawback address
+Now we deploy the smart contract using ``wallet1``, and make all the wallets opt-in the app.
+
+```console
+# Royalty fee 3.5%, in thousands
+ROYALTY_FEE=35
+
+# compile PyTeal into TEAL
+python3 src/smart_contract.py src/approval.teal src/clear.teal
+
+# create app
+GLOBAL_BYTES_SLICES=1
+GLOBAL_INTS=3
+LOCAL_BYTES_SLICES=1
+LOCAL_INTS=5
+
+export APP_ID=$(
+  goal app create --creator "$WALLET1_ADDR" \
+    --approval-prog src/approval.teal \
+    --clear-prog src/clear.teal \
+    --global-byteslices "$GLOBAL_BYTES_SLICES" \
+    --global-ints "$GLOBAL_INTS" \
+    --local-byteslices "$LOCAL_BYTES_SLICES" \
+    --local-ints "$LOCAL_INTS" \
+    --app-arg addr:$WALLET1_ADDR \
+    --app-arg int:$ASSET_ID \
+    --app-arg int:$ROYALTY_FEE |
+    grep Created |
+    awk '{ print $6 }'
+)
+
+
+# Export App Address
+export APP_ADDRESS=$(${gcmd} app info  --app-id "$APP_ID" | awk '{print $3}' | head -2 | tail -1)
+echo -e "\e[1;32mApp ID:\e[0m $APP_ADDRESS"
+
+# Fund App
+goal clerk send -a 200000 -f $WALLET1_ADDR -t $APP_ADDRESS -N
+
+# Setting clawback
+goal asset config --assetid $ASSET_ID --manager $WALLET1_ADDR --new-clawback $APP_ADDRESS --new-freezer $APP_ADDRESS --new-manager ""
+
+# App opt in
+goal app optin --app-id $APP_ID --from $WALLET1_ADDR
+goal app optin --app-id $APP_ID --from $WALLET2_ADDR
+goal app optin --app-id $APP_ID --from $WALLET3_ADDR
+```
+
+
+### 4.3 Simulate sale from ``wallet1`` to ``wallet2``
+Here we simulate the sale from ``wallet1`` to ``wallet2``. 
+1. We first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. We must pass 3 arguments: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` command.
+2. 
+
+
+```console
+NFT_AMOUNT=1
+NFT_PRICE=1000000
+goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
+```
+### 4.4 Simulate sale from ``wallet2`` to ``wallet3``
+### 4.5 Verify royalty fees
 
 ## 5. Conclusions
 

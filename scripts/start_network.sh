@@ -52,4 +52,6 @@ goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET1_ADDR -d $NETWORK_FOLD
 goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET2_ADDR -d $NETWORK_FOLDER/Node1 -N
 goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET3_ADDR -d $NETWORK_FOLDER/Node1 -N
 
+
+export ALGORAND_DATA="$NETWORK_FOLDER/Node1"
 echo -e "\e[1;31mNetwork created\e[0m"

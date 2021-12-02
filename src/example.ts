@@ -17,6 +17,10 @@ let requiredVariables: Array<string> = [
     'ASSET_ID'
   ];
 
+async function sale(wallet1: any, wallet2: any) {
+  
+}
+
 
 async function main() {
   // Load environment variables
@@ -131,65 +135,61 @@ async function main() {
   
   console.log('[X] Asset correctly transfered from wallet 1 to wallet 2!');
   console.log('=============================================================')
-  console.log('[X] Starting sell from wallet 1 to wallet 2');
-  // console.log('Sold item from wallet 1 to wallet 2');
+  console.log('[X] Initializing sale from wallet 2. Calling `setupTransfer` method from wallet 2');
   
+  // call the created application
+  appTxn = algosdk.makeApplicationNoOpTxnFromObject({
+    from: wallet2.addr,
+    suggestedParams: suggestedParams,
+    appIndex: appId,
+    appArgs: [new Uint8Array(Buffer.from('setupSale')),
+     algosdk.encodeUint64(amountPayment),
+     algosdk.encodeUint64(amountAsset)
+     ],
+    foreignAssets: [assetIndex]
+    }
+  );
 
-  // console.log('===== SELLING FROM WALLET 2 to WALLET 3 =====');
-  // await app.updateState();
+  await executeGroupTransaction(algoNode, [appTxn], [wallet2]);
+  console.log('[X] Sale initialized');
+  console.log('[X] Sending payment from wallet 3 to smart contract. Calling `buyASA` method from wallet 3');
 
-  // console.log('Initializing sale from wallet 2 to wallet 3');
-  // // call the created application
-  // appTxn = algosdk.makeApplicationNoOpTxnFromObject({
-  //   from: wallet2.addr,
-  //   suggestedParams: suggestedParams,
-  //   appIndex: appId,
-  //   appArgs: [new Uint8Array(Buffer.from('setupTransfer')),
-  //    algosdk.encodeUint64(amountPayment),
-  //    algosdk.encodeUint64(amountAsset)
-  //    ],
-  //   foreignAssets: [assetIndex]
-  //   }
-  // );
+  // call the created application
+  appTxn = algosdk.makeApplicationNoOpTxnFromObject({
+    from: wallet3.addr,
+    suggestedParams: suggestedParams,
+    appIndex: appId,
+    appArgs: [new Uint8Array(Buffer.from('buyASA')),  algosdk.encodeUint64(assetIndex), algosdk.encodeUint64(amountAsset)],
+    accounts: [wallet2.addr],
+    foreignAssets: [assetIndex]
+  });
 
-  // await executeGroupTransaction(algoNode, [appTxn], [wallet2]);
-  // console.log('Sale initialized. Sending payment...');
+  // Pay the app
+  paymentTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+      from: wallet3.addr,
+      to: appAddress,
+      amount: amountPayment,
+      suggestedParams: suggestedParams,
+    }
+  )
 
-  // // call the created application
-  // appTxn = algosdk.makeApplicationNoOpTxnFromObject({
-  //   from: wallet3.addr,
-  //   suggestedParams: suggestedParams,
-  //   appIndex: appId,
-  //   appArgs: [new Uint8Array(Buffer.from('payASA')),  algosdk.encodeUint64(assetIndex), algosdk.encodeUint64(amountAsset)],
-  //   accounts: [wallet2.addr],
-  //   foreignAssets: [assetIndex]
-  // });
+  await executeGroupTransaction(algoNode,
+    [appTxn, paymentTxn],
+    [wallet3, wallet3]);
 
-  // // Pay the app
-  // paymentTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-  //     from: wallet3.addr,
-  //     to: app.addr,
-  //     amount: amountPayment,
-  //     suggestedParams: suggestedParams,
-  //   }
-  // )
+  console.log('[X] Payment accepted');
+  console.log('[X] Finalizing transfer. Calling `executeTransfer` method from wallet 2');
 
-  // await executeGroupTransaction(algoNode,
-  //   [appTxn, paymentTxn],
-  //   [wallet3, wallet3]);
-
-  // console.log('Payment send');
-  // console.log('Executing transfer');
-  // appTxn = algosdk.makeApplicationNoOpTxnFromObject({
-  //   from: wallet3.addr,
-  //   suggestedParams: suggestedParams,
-  //   appIndex: appId,
-  //   appArgs: [new Uint8Array(Buffer.from('executeTransfer'))],
-  //   accounts: [wallet2.addr, wallet1.addr],
-  //   foreignAssets: [assetIndex]
-  // });
-  // await executeGroupTransaction(algoNode, [appTxn], [wallet3]);
-  // console.log('Sold item from wallet 2 to wallet 3');
+  appTxn = algosdk.makeApplicationNoOpTxnFromObject({
+    from: wallet3.addr,
+    suggestedParams: suggestedParams,
+    appIndex: appId,
+    appArgs: [new Uint8Array(Buffer.from('executeTransfer'))],
+    accounts: [wallet2.addr, wallet1.addr],
+    foreignAssets: [assetIndex]
+  });
+  await executeGroupTransaction(algoNode, [appTxn], [wallet3]);
+  console.log('[X] Asset correctly transfered from wallet 2 to wallet 3!');
   
 }
 
