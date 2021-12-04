@@ -1,10 +1,10 @@
 # Royalty Fees on Algorand
-This is a short tutorial that explains how to implement Royalty Fees using Inner Transactions and Teal v5 capabilities in Algorand.
-The smart contract has been written in PyTeal, and all the examples are written using Typescript.
+This is a short tutorial that explains how to implement Royalty Fees using [Inner Transactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) and [Teal v5](https://developer.algorand.org/docs/get-details/dapps/avm/teal/) capabilities in Algorand.
+The smart contract has been written in [PyTeal](https://pyteal.readthedocs.io/), and all the examples are written using Typescript.
 
 We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
 
-For a complete description of the tutorial, please refer to the main article.
+For a complete description of the tutorial, please refer to the [main article]((https://github.com/rssalessio/algorand-royalty-fees/blob/main/article.md)).
 Otherwise, just check the **Install** section and the **How to run** section.
 
 AUTHOR: Alessio Russo (alessior@kth.se)
@@ -60,7 +60,13 @@ Please follow the following steps. Note that step 5 is optional depending on wet
     * To stop the network run the command ``source scripts/stop_network.sh``
 
 ## How to run
+To run the example
 
+1. Create the network: ``source scripts/start_network.sh``
+2. Create the asset and deploy the app ``source scripts/config.sh``
+3. Run the example script ``ts-node src/example.ts``
+
+Alternatively you can check the guide [here](https://github.com/rssalessio/algorand-royalty-fees/blob/main/article.md)
 
 ## General Teal guidelines
 - [PyTeal documentation](https://pyteal.readthedocs.io/)

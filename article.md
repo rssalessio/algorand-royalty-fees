@@ -1,19 +1,21 @@
 # Royalty Fees on Algorand
-This is a short tutorial that explains how to implement Royalty Fees using Inner Transactions and Teal v5 capabilities in Algorand.
-The smart contract has been written in PyTeal, and all the examples are written using Typescript.
+This is a short tutorial that explains how to implement Royalty Fees using [Inner Transactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) and [Teal v5](https://developer.algorand.org/docs/get-details/dapps/avm/teal/) capabilities in Algorand.
+The smart contract has been written in [PyTeal](https://pyteal.readthedocs.io/), and all the examples are written using Typescript.
 
 We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
 
 
-## 0. Requirements
+## 0. Requirements and set up
 We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
 
 Other requirements:
 
-
 1. Have a running [Algorand node](https://developer.algorand.org/docs/run-a-node/setup/install), or [use the sandbox](https://github.com/algorand/sandbox)
+  * You can use the script ``scripts/start_network.sh`` to start a private network with all the wallets/variables already initialized.
+  * To use the script type ``source scripts/start_network.sh`` from the root folder.
 2. Having PyTeal installed (requires python 3)
-3. Install [Node-js](https://nodejs.org/) for the examples, together with the ``algosdk`` library, ``typescript`` and ``ts-node``
+3. [_Optional_] If you want to run the example script in ``src/examples.ts`` you need to install [Node-js](https://nodejs.org/)
+    * After installing Node you need to install the following libraries:  ``algosdk``, ``typescript`` and ``ts-node``.
 
 Please, check [README file](https://github.com/rssalessio/algorand-royalty-fees/blob/main/README.md) for more instructions.
 
@@ -438,8 +440,10 @@ We proceed as follows
 4. ``wallet2`` puts the NFT up for sale and ``wallet3`` buys it
 5. Finally, we redeem the fees using ``wallet1``
 
+We assume that there exist the variables ``$WALLET1_ADDR``, ``$WALLET2_ADDR`` and ``$WALLET3_ADDR``. Each one of these variables contains the corresponding wallet's address (note that if you source the script file in ``scripts/start_network.sh`` it will automatically set up all the variables for you).
+
 ### 4.1 Creating the asset
-We start by creating the asset (note that the asset is initially frozen). In this part of the tutorial I assume that there exists a variable ``$WALLET1_ADDR`` that contains the address of ``wallet1``.
+We start by creating the asset (note that the asset is initially frozen).
 
 We also save the asset id variable in ``$ASSET_ID`` and make ``wallet2`` and ``wallet3`` opt-in the asset.
 
@@ -627,5 +631,15 @@ goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:claimFees
 
 ``
 
-## 5. Conclusions
+## 5. Running the example script
+You can also run the example scenario by executing the script in ``src/example.ts``. To run the script:
 
+1. Create the network: ``source scripts/start_network.sh``
+2. Create the asset and deploy the app ``source scripts/config.sh``
+3. Run the example script ``ts-node src/example.ts``
+
+
+## 6. Conclusions
+In this guide we have seen how to guarantee royalty fees using PyTeal (and Teal v5). Thanks to the functionalities provided by [InnerTransactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) we are now able to better automate transactions using smart contracts in Algorand. In the future I expect royalty fees to be standardized, and perhaps have a corresponding [ARC](https://github.com/algorandfoundation/ARCs/).
+
+Thanks for reading!
