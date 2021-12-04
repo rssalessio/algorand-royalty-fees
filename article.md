@@ -124,7 +124,7 @@ onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())      
          .ElseIf(Gtxn[0].application_args[0] == Constants.refund).Then(refund)                    \
          .ElseIf(Gtxn[0].application_args[0] == Constants.claimFees).Then(claimFees)              \
          .Else(Reject())
-````
+```
 First, we check that the user called the smart contract correctly. Then we check the first argument of ``application_args`` (we use the first argument to discriminate between the various operations). As you can see in the code there is a list of ``ElseIf`` statementents that are used to distinguish between the various values. The accepted values are ``setupSale, buyASA, executeTransfer, refund, claimFees``.
 1. ``setupSale`` Can be called by any user, and it is used to set up a new sale.
 2. ``buyASA`` Any user that wants to buy the asset needs to call this method first.
