@@ -4,7 +4,7 @@ The smart contract has been written in [PyTeal](https://pyteal.readthedocs.io/),
 
 We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.
 
-For a complete description of the tutorial, please refer to the [main article]((https://github.com/rssalessio/algorand-royalty-fees/blob/main/article.md)).
+For a complete description of the tutorial, please refer to the [main article](https://github.com/rssalessio/algorand-royalty-fees/blob/main/article.md).
 Otherwise, just check the **Install** section and the **How to run** section.
 
 AUTHOR: Alessio Russo (alessior@kth.se)
