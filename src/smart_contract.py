@@ -244,7 +244,7 @@ def approval_program():
     # We also account for the serviceCost to pay the inner transaction
     royaltyFee = App.globalGet(Constants.royaltyFee)
     collectedFees = App.globalGet(Constants.collectedFees)
-    feesToBePaid = computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)
+    feesToBePaid = ScratchVar(TealType.uint64, 0)
     executeTransfer = Seq([
         Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
         Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
@@ -255,14 +255,16 @@ def approval_program():
         Assert(                                                                         # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
                 >=  amountAssetToBeTransfered),
-        Assert(Int(2 ** 64) - feesToBePaid >= amountToBePaid - serviceCost),            # Check overflow on payment
-        Assert(Int(2 ** 64) - collectedFees >= feesToBePaid),                           # Check overflow on collected fees
-        Assert(amountToBePaid - serviceCost > feesToBePaid),
+        feesToBePaid.store(
+            computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)),               # Reduce number of subroutine calls by saving the variable inside a scratchvar variable
+        Assert(Int(2 ** 64 - 1) - feesToBePaid.load() >= amountToBePaid - serviceCost), # Check overflow on payment
+        Assert(Int(2 ** 64 - 1) - collectedFees >= feesToBePaid.load()),                # Check overflow on collected fees
+        Assert(amountToBePaid - serviceCost > feesToBePaid.load()),
         transferAsset(seller,                                                           # Transfer asset
                       Gtxn[0].sender(),
                       App.globalGet(Constants.AssetId), amountAssetToBeTransfered),
-        sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid),               # Pay seller
-        App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid),           # Collect fees
+        sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid.load()),        # Pay seller
+        App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid.load()),    # Collect fees
         App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
         App.localDel(seller, Constants.amountASA),
         App.localDel(seller, Constants.approveTransfer),
