@@ -33,10 +33,10 @@ def defaultTransactionChecks(txnId: Int) -> Expr:
     :param Int txnId : Index of the transaction
     """
     return Seq([
-        Assert(txnId < Global.group_size())#,
-        # Assert(Gtxn[txnId].rekey_to() == Global.zero_address()),
-        # Assert(Gtxn[txnId].close_remainder_to() == Global.zero_address()),
-        # Assert(Gtxn[txnId].asset_close_to() == Global.zero_address())
+        Assert(txnId < Global.group_size()),
+        Assert(Gtxn[txnId].rekey_to() == Global.zero_address()),
+        Assert(Gtxn[txnId].close_remainder_to() == Global.zero_address()),
+        Assert(Gtxn[txnId].asset_close_to() == Global.zero_address())
     ])
 
 
@@ -177,12 +177,20 @@ def approval_program():
     # We first verify the the seller has enough ASA to sell, and then we locally save the arguments
     priceArg = Btoi(Txn.application_args[1])
     amountOfASAArg = Btoi(Txn.application_args[2])
+    assetClawback = AssetParam.clawback(App.globalGet(Constants.AssetId))
+    assetFreeze = AssetParam.freeze(App.globalGet(Constants.AssetId))
     setupSale = Seq([
         Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
         Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
         defaultTransactionChecks(Int(0)),                                                     # Perform default transaction checks
         Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
         Assert(amountOfASAArg != Int(0)),                                                     # Check that the amount of ASA to transfer is different than 0                
+        assetClawback,                                                                        # Verify that the clawback address is the contract
+        Assert(assetClawback.hasValue()),
+        Assert(assetClawback.value() == Global.current_application_address()),
+        assetFreeze,                                                                          # Verify that the freeze address is the contract
+        Assert(assetFreeze.hasValue()),
+        Assert(assetFreeze.value() == Global.current_application_address()),
         Assert(                                                                               # Verify that the seller has enough ASA to sell
             getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId))
                 >=  amountOfASAArg),

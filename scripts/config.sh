@@ -52,7 +52,8 @@ export APP_ID=$(
     --local-ints "$LOCAL_INTS" \
     --app-arg addr:$WALLET1_ADDR \
     --app-arg int:$ASSET_ID \
-    --app-arg int:$ROYALTY_FEE |
+    --app-arg int:$ROYALTY_FEE \
+    --foreign-asset $ASSET_ID |
     grep Created |
     awk '{ print $6 }'
 )
