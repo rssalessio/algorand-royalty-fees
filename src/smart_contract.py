@@ -217,6 +217,7 @@ def approval_program():
     amountAssetToBeTransfered = App.localGet(seller, Constants.amountASA)                     # Amount of ASA
     approval = App.localGet(seller, Constants.approveTransfer)                                # Variable that checks if the transfer has alraedy been approved
     buyer = Gtxn[0].sender()
+    # Logic
     buyASA = Seq([
         Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 3 arguments
         Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
@@ -250,15 +251,18 @@ def approval_program():
         defaultTransactionChecks(Int(0)),                                               # Perform default transaction checks
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),              # Check that approval is set to 1 from seller' side
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
+        Assert(serviceCost < amountToBePaid),                                           # Check underflow
         Assert(                                                                         # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
                 >=  amountAssetToBeTransfered),
+        Assert(Int(2 ** 64) - feesToBePaid >= amountToBePaid - serviceCost),            # Check overflow on payment
+        Assert(Int(2 ** 64) - collectedFees >= feesToBePaid),                           # Check overflow on collected fees
         Assert(amountToBePaid - serviceCost > feesToBePaid),
         transferAsset(seller,                                                           # Transfer asset
                       Gtxn[0].sender(),
                       App.globalGet(Constants.AssetId), amountAssetToBeTransfered),
         sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid),               # Pay seller
-        App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid),           # Collect fees, perhaps check for overflow?
+        App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid),           # Collect fees
         App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
         App.localDel(seller, Constants.amountASA),
         App.localDel(seller, Constants.approveTransfer),
@@ -274,7 +278,7 @@ def approval_program():
         defaultTransactionChecks(Int(0)),                                                # Perform default transaction checks
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
-        Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
+        Assert(amountToBePaid > Int(1000)),                                              # Underflow check: verify that the amount is greater than the transaction fee
         sendPayment(buyer, amountToBePaid - Int(1000)),                                  # Refund buyer
         App.localPut(seller, Constants.approveTransfer, Int(0)),                         # Reset local variables
         App.localDel(buyer, Constants.approveTransfer),
