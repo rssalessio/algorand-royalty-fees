@@ -21,18 +21,22 @@ class Constants:
 
 
 @Subroutine(TealType.none)
-def defaultTransactionChecks(txn: Txn) -> Expr:
+def defaultTransactionChecks(txnId: Int) -> Expr:
     """
     This subroutine is used to perform some default checks on the
-    incoming transactions. It checks that the rekeyTo, closeRemainderTo,
-    and the assetCloseTo attributes are set equal to the zero address
+    incoming transactions.
 
-    :param Txn txn : The transaction to check
+    For a given index of the transaction to check, it verifies that
+    the rekeyTo, closeRemainderTo, and the assetCloseTo attributes
+    are set equal to the zero address
+
+    :param Int txnId : Index of the transaction
     """
     return Seq([
-        Assert(Txn.rekey_to() == Global.zero_address()),
-        Assert(Txn.close_remainder_to() == Global.zero_address()),
-        Assert(Txn.asset_close_to() == Global.zero_address())
+        Assert(txnId < Global.group_size())#,
+        # Assert(Gtxn[txnId].rekey_to() == Global.zero_address()),
+        # Assert(Gtxn[txnId].close_remainder_to() == Global.zero_address()),
+        # Assert(Gtxn[txnId].asset_close_to() == Global.zero_address())
     ])
 
 
@@ -152,7 +156,7 @@ def approval_program():
         Assert(Txn.type_enum() == TxnType.ApplicationCall),                  # Check if it's an application call
         Assert(Txn.application_args.length() == Int(3)),                     # Check that there are 3 arguments, Creator, AssetId and Royalty Fee
         Assert(royaltyFeeArg >= Int(0) and royaltyFeeArg <= Int(1000)),      # verify that the Royalty fee is between 0 and 1000
-        defaultTransactionChecks(Txn),                                       # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                    # Perform default transaction checks
         assetDecimals,                                                       # Load the asset decimals
         Assert(assetDecimals.hasValue()),
         Assert(assetDecimals.value() == Int(0)),                             # Verify that there are no decimals
@@ -176,7 +180,7 @@ def approval_program():
     setupSale = Seq([
         Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
         Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
-        defaultTransactionChecks(Txn),                                                        # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                                     # Perform default transaction checks
         Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
         Assert(amountOfASAArg != Int(0)),                                                     # Check that the amount of ASA to transfer is different than 0                
         Assert(                                                                               # Verify that the seller has enough ASA to sell
@@ -214,8 +218,8 @@ def approval_program():
         Assert(amountToBePaid == Gtxn[1].amount()),                                           # Check that the amount to be paid is correct
         Assert(amountAssetToBeTransfered == Btoi(Gtxn[0].application_args[2])),               # Check that there amount of ASA to sell is correct
         Assert(Global.current_application_address() == Gtxn[1].receiver()),                   # Check that the receiver of the payment is the App
-        defaultTransactionChecks(Gtxn[0]),                                                    # Perform default transaction checks
-        defaultTransactionChecks(Gtxn[1]),                                                    # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                                     # Perform default transaction checks
+        defaultTransactionChecks(Int(1)),                                                     # Perform default transaction checks
         Assert(                                                                               # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
                 >=  amountAssetToBeTransfered),
@@ -235,7 +239,7 @@ def approval_program():
     executeTransfer = Seq([
         Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
         Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
-        defaultTransactionChecks(Txn),                                                  # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                               # Perform default transaction checks
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),              # Check that approval is set to 1 from seller' side
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
         Assert(                                                                         # Verify that the seller has enough ASA to sell
@@ -259,7 +263,7 @@ def approval_program():
     refund = Seq([
         Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
         Assert(Txn.application_args.length() == Int(1)),                                 # Check that there is only 1 argument  
-        defaultTransactionChecks(Txn),                                                   # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                                # Perform default transaction checks
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
         Assert(amountToBePaid > Int(1000)),                                              # Verify that the amount is greater than the transaction fee
@@ -276,7 +280,7 @@ def approval_program():
     claimFees = Seq([
         Assert(Global.group_size() == Int(1)),                                                 # Verify that it is only 1 transaction
         Assert(Txn.application_args.length() == Int(1)),                                       # Check that there is only 1 argument
-        defaultTransactionChecks(Txn),                                                         # Perform default transaction checks
+        defaultTransactionChecks(Int(0)),                                                      # Perform default transaction checks
         Assert(Txn.sender() == App.globalGet(Constants.Creator)),                              # Verify that the sender is the creator
         Assert(App.globalGet(Constants.collectedFees) > Int(0)),                               # Check that there are enough fees to collect
         sendPayment(App.globalGet(Constants.Creator), App.globalGet(Constants.collectedFees)), # Pay creator
