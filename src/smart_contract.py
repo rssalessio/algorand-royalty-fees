@@ -144,6 +144,24 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
            .ElseIf(remainder > Int(500)).Then(division + Int(1))           \
            .Else(division)
 
+@Subroutine(TealType.none)
+def checkRoyaltyFeeComputation(amount: Int, royaltyFee: Int) -> Expr:
+    """
+    This subroutine checks that there are no problems computing the
+    royalty fee  given a specific ``amount`` and the predefined ``royaltyFee``.
+    The ``royaltyFee`` variable must be expressed in thousands.
+
+    :param Int amount       : The amount paid
+    :param Int royaltyFee   : The royalty fee (in thousands)
+    :return                 : Fee to be paid in microAlgos
+    :rtype                  : Int
+    """
+
+    return Seq([
+        Assert(amount > Int(0)),
+        Assert(royaltyFee <= Div(Int(2 ** 64 - 1), amount)),
+    ])
+
 
 def approval_program():
     serviceCost = Int(2000) # cost of 2 inner transactions
@@ -155,7 +173,7 @@ def approval_program():
     initialize = Seq([
         Assert(Txn.type_enum() == TxnType.ApplicationCall),                  # Check if it's an application call
         Assert(Txn.application_args.length() == Int(3)),                     # Check that there are 3 arguments, Creator, AssetId and Royalty Fee
-        Assert(royaltyFeeArg >= Int(0) and royaltyFeeArg <= Int(1000)),      # verify that the Royalty fee is between 0 and 1000
+        Assert(royaltyFeeArg > Int(0) and royaltyFeeArg <= Int(1000)),       # verify that the Royalty fee is between 0 and 1000
         defaultTransactionChecks(Int(0)),                                    # Perform default transaction checks
         assetDecimals,                                                       # Load the asset decimals
         Assert(assetDecimals.hasValue()),
@@ -244,7 +262,7 @@ def approval_program():
     # We also account for the serviceCost to pay the inner transaction
     royaltyFee = App.globalGet(Constants.royaltyFee)
     collectedFees = App.globalGet(Constants.collectedFees)
-    feesToBePaid = ScratchVar(TealType.uint64, 0)
+    feesToBePaid = ScratchVar(TealType.uint64)
     executeTransfer = Seq([
         Assert(Gtxn[0].application_args.length() == Int(1)),                            # Check that there is only 1 argument
         Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
@@ -255,6 +273,7 @@ def approval_program():
         Assert(                                                                         # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
                 >=  amountAssetToBeTransfered),
+        checkRoyaltyFeeComputation(amountToBePaid - serviceCost, royaltyFee),
         feesToBePaid.store(
             computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)),               # Reduce number of subroutine calls by saving the variable inside a scratchvar variable
         Assert(Int(2 ** 64 - 1) - feesToBePaid.load() >= amountToBePaid - serviceCost), # Check overflow on payment
