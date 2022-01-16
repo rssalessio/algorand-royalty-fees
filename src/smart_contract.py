@@ -180,7 +180,7 @@ def approval_program():
     assetFrozen = AssetParam.defaultFrozen(Btoi(Txn.application_args[1]))
     initialize = Seq([
         Assert(Txn.type_enum() == TxnType.ApplicationCall),                  # Check if it's an application call
-        Assert(Txn.application_args.length() == Int(3)),                     # Check that there are 4 arguments, Creator, AssetId and Royalty Fee and Round Wait
+        Assert(Txn.application_args.length() == Int(4)),                     # Check that there are 4 arguments, Creator, AssetId and Royalty Fee and Round Wait
         Assert(royaltyFeeArg > Int(0) and royaltyFeeArg <= Int(1000)),       # verify that the Royalty fee is between 0 and 1000
         defaultTransactionChecks(Int(0)),                                    # Perform default transaction checks
         assetDecimals,                                                       # Load the asset decimals
