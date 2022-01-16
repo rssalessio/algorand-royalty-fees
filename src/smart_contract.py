@@ -15,9 +15,11 @@ class Constants:
     buyASA            = Bytes("buyASA")                # Method call
     executeTransfer   = Bytes("executeTransfer")       # Method call
     royaltyFee        = Bytes("royaltyFee")            # Royalty fee in thousands
+    waitingTime       = Bytes("waitingTime")           # Number of rounds to wait before the seller can force the transaction
     claimFees         = Bytes("claimFees")             # Method call
     collectedFees     = Bytes("collectedFees")         # Amount of collected fees, stored globally
     refund            = Bytes("refund")                # Method call
+    roundSaleBegan    = Bytes("roundSaleBegan")        # Round in which the sale began
 
 
 @Subroutine(TealType.none)
@@ -55,7 +57,7 @@ def sendPayment(receiver: Addr, amount: Int) -> Expr:
             TxnField.type_enum: TxnType.Payment,
             TxnField.amount: amount,
             TxnField.receiver: receiver,
-            TxnField.fee: Int(1000)
+            TxnField.fee: Global.min_txn_fee()
         }),
         InnerTxnBuilder.Submit(),
     ])
@@ -85,7 +87,7 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
             TxnField.asset_receiver: receiver,
             TxnField.asset_sender: sender,
             TxnField.xfer_asset: assetId,
-            TxnField.fee: Int(1000)
+            TxnField.fee: Global.min_txn_fee()
         }),
         InnerTxnBuilder.Submit(),
     ])
@@ -120,18 +122,18 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
     predefined ``royaltyFee``.
     The ``royaltyFee`` variable must be expressed in thousands.
 
-    Note that we assume that amount * royaltyFee will not overflow.
-    In case it does, it will trigger an error and the transaction will
-    fail.
+    Note: make sure to call first checkRoyaltyFeeComputation() before calling
+    this function
 
     :param Int amount       : The amount paid
     :param Int royaltyFee   : The royalty fee (in thousands)
     :return                 : Fee to be paid in microAlgos
     :rtype                  : Int            
     """
-    # If Mul() overflows the transaction will fail
-    remainder = Mod(Mul(amount, royaltyFee), Int(1000))
-    division = Div(Mul(amount, royaltyFee), Int(1000))
+    # The safety of computing `remainder` and `division` is given by
+    # calling the checkRoyaltyFeeComputation() function.
+    remainder = ScratchVar(TealType.uint64)
+    division = ScratchVar(TealType.uint64)
 
     # Computes the royalty fee. If the fee is equal to 0, or the amount is very small
     # the fee will be 0.
@@ -139,10 +141,16 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
     # If the remainder of royaltyFee * amount / 1000 is larger than 500 we round up the
     # result and return  1 + royaltyFee * amount / 1000. Otherwise we just return
     # royaltyFee * amount / 1000.
-    return If(Or(royaltyFee == Int(0), division == Int(0))).Then(Int(0))   \
-           .ElseIf(royaltyFee >= Int(1000)).Then(amount)                   \
-           .ElseIf(remainder > Int(500)).Then(division + Int(1))           \
-           .Else(division)
+
+    return Seq([
+        checkRoyaltyFeeComputation(amount, royaltyFee),
+        remainder.store(Mod(Mul(amount, royaltyFee), Int(1000))),
+        division.store(Div(Mul(amount, royaltyFee), Int(1000))),
+        Return(If(Or(royaltyFee == Int(0), division.load() == Int(0))).Then(Int(0))   \
+        .ElseIf(royaltyFee >= Int(1000)).Then(amount)                   \
+        .ElseIf(remainder.load() > Int(500)).Then(division.load() + Int(1))           \
+        .Else(division.load()))
+    ])
 
 @Subroutine(TealType.none)
 def checkRoyaltyFeeComputation(amount: Int, royaltyFee: Int) -> Expr:
@@ -164,7 +172,7 @@ def checkRoyaltyFeeComputation(amount: Int, royaltyFee: Int) -> Expr:
 
 
 def approval_program():
-    serviceCost = Int(2000) # cost of 2 inner transactions
+    serviceCost = Int(2) * Global.min_txn_fee() # cost of 2 inner transactions
 
     # [Step 1] Sequence used to initialize the smart contract. Should be called only at creation
     royaltyFeeArg = Btoi(Txn.application_args[2])
@@ -172,7 +180,7 @@ def approval_program():
     assetFrozen = AssetParam.defaultFrozen(Btoi(Txn.application_args[1]))
     initialize = Seq([
         Assert(Txn.type_enum() == TxnType.ApplicationCall),                  # Check if it's an application call
-        Assert(Txn.application_args.length() == Int(3)),                     # Check that there are 3 arguments, Creator, AssetId and Royalty Fee
+        Assert(Txn.application_args.length() == Int(3)),                     # Check that there are 4 arguments, Creator, AssetId and Royalty Fee and Round Wait
         Assert(royaltyFeeArg > Int(0) and royaltyFeeArg <= Int(1000)),       # verify that the Royalty fee is between 0 and 1000
         defaultTransactionChecks(Int(0)),                                    # Perform default transaction checks
         assetDecimals,                                                       # Load the asset decimals
@@ -184,6 +192,7 @@ def approval_program():
         App.globalPut(Constants.Creator, Txn.application_args[0]),           # Save the initial creator
         App.globalPut(Constants.AssetId, Btoi(Txn.application_args[1])),     # Save the asset ID
         App.globalPut(Constants.royaltyFee, royaltyFeeArg),                  # Save the royalty fee
+        App.globalPut(Constants.waitingTime, Btoi(Txn.application_args[3])), # Save the waiting time in number of rounds
         Approve()
     ])
 
@@ -250,8 +259,10 @@ def approval_program():
         Assert(                                                                               # Verify that the seller has enough ASA to sell
             getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
                 >=  amountAssetToBeTransfered),
+        Assert(buyer != seller),                                                              # Make sure the seller is not the buyer!
         App.localPut(seller, Constants.approveTransfer, Int(1)),                              # Approve the transfer from seller' side
         App.localPut(buyer, Constants.approveTransfer, Int(1)),                               # Approve the transfer from buyer' side
+        App.localPut(seller, Constants.roundSaleBegan, Global.round()),                       # Save the round number
         Approve()
     ])
 
@@ -268,14 +279,18 @@ def approval_program():
         Assert(Global.group_size() == Int(1)),                                          # Check that is only 1 transaction
         defaultTransactionChecks(Int(0)),                                               # Perform default transaction checks
         Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),              # Check that approval is set to 1 from seller' side
-        Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),               # Check approval from buyer' side
+        Assert(Or(
+            And(seller != buyer,
+                App.localGet(buyer, Constants.approveTransfer) == Int(1)),              # Check approval from buyer' side
+            Global.round() > App.globalGet(Constants.waitingTime)                       # Alternatively, the seller can force the transaction if enough
+                + App.localGet(seller, Constants.roundSaleBegan))),                     # time has passed
         Assert(serviceCost < amountToBePaid),                                           # Check underflow
         Assert(                                                                         # Verify that the seller has enough ASA to sell
-            getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
+            getAccountASABalance(seller, App.globalGet(Constants.AssetId))
                 >=  amountAssetToBeTransfered),
-        checkRoyaltyFeeComputation(amountToBePaid - serviceCost, royaltyFee),
-        feesToBePaid.store(
-            computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)),               # Reduce number of subroutine calls by saving the variable inside a scratchvar variable
+        feesToBePaid.store(                                                             # Reduce number of subroutine calls by saving the variable inside a scratchvar variable
+            If(seller == App.globalGet(Constants.Creator)).Then(Int(0))                 # Compute royalty fees: if the seller is the creator, the fees are 0
+            .Else(computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee))),        
         Assert(Int(2 ** 64 - 1) - feesToBePaid.load() >= amountToBePaid - serviceCost), # Check overflow on payment
         Assert(Int(2 ** 64 - 1) - collectedFees >= feesToBePaid.load()),                # Check overflow on collected fees
         Assert(amountToBePaid - serviceCost > feesToBePaid.load()),
@@ -297,10 +312,11 @@ def approval_program():
         Assert(Global.group_size() == Int(1)),                                           # Verify that it is only 1 transaction
         Assert(Txn.application_args.length() == Int(1)),                                 # Check that there is only 1 argument  
         defaultTransactionChecks(Int(0)),                                                # Perform default transaction checks
-        Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Asset that the payment has already been done
+        Assert(buyer != seller),                                                         # Assert that the buyer is not the seller
+        Assert(App.localGet(seller, Constants.approveTransfer) == Int(1)),               # Assert that the payment has already been done
         Assert(App.localGet(buyer, Constants.approveTransfer) == Int(1)),
-        Assert(amountToBePaid > Int(1000)),                                              # Underflow check: verify that the amount is greater than the transaction fee
-        sendPayment(buyer, amountToBePaid - Int(1000)),                                  # Refund buyer
+        Assert(amountToBePaid > Global.min_txn_fee()),                                   # Underflow check: verify that the amount is greater than the transaction fee
+        sendPayment(buyer, amountToBePaid - Global.min_txn_fee()),                       # Refund buyer
         App.localPut(seller, Constants.approveTransfer, Int(0)),                         # Reset local variables
         App.localDel(buyer, Constants.approveTransfer),
         Approve()

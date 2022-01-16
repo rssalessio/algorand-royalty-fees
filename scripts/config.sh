@@ -11,6 +11,9 @@ gcmd="goal -d $NETWORK_FOLDER/Node1"
 # Royalty fee 3.5%
 ROYALTY_FEE=35
 
+# Number of rounds to wait until the seller can force the transaction
+WAITING_TIME=15
+
 #############################
 # Create ASSET
 #############################
@@ -38,9 +41,9 @@ echo -e "\e[1;32mCompiling Stateful contract to TEAL\e[0m"
 # create app
 echo -e "\e[1;32mDeploying stateful contract\e[0m"
 GLOBAL_BYTES_SLICES=1
-GLOBAL_INTS=3
+GLOBAL_INTS=4
 LOCAL_BYTES_SLICES=0
-LOCAL_INTS=3
+LOCAL_INTS=4
 
 export APP_ID=$(
   ${gcmd} app create --creator "$WALLET1_ADDR" \
@@ -53,6 +56,7 @@ export APP_ID=$(
     --app-arg addr:$WALLET1_ADDR \
     --app-arg int:$ASSET_ID \
     --app-arg int:$ROYALTY_FEE \
+    --app-arg int:$WAITING_TIME \
     --foreign-asset $ASSET_ID |
     grep Created |
     awk '{ print $6 }'
