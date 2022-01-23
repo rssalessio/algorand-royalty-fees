@@ -40,7 +40,6 @@ async function main() {
   }
 
   // Load asset and app parameters
-  const amountAsset: number = 1;
   const amountPayment: number = 200000;
   const assetIndex: number = parseInt(process.env.ASSET_ID!);
   const appId: number = parseInt(process.env.APP_ID!);
@@ -81,7 +80,6 @@ async function main() {
     appIndex: appId,
     appArgs: [new Uint8Array(Buffer.from('setupSale')),
      algosdk.encodeUint64(amountPayment),
-     algosdk.encodeUint64(amountAsset)
      ],
     foreignAssets: [assetIndex]          // We need to specify the asset id in foreignAssets, so that the smart contract can load it
     }
@@ -90,15 +88,15 @@ async function main() {
   // Execute transaction
   await executeGroupTransaction(algoNode, [appTxn], [wallet1]);
   console.log('[X] Sale initialized');
-  console.log('[X] Sending payment from wallet 2 to smart contract. Calling `buyASA` method from wallet 2');
+  console.log('[X] Sending payment from wallet 2 to smart contract. Calling `buy` method from wallet 2');
 
-  // call the  method 'buyASA'. Note that we must specify in the transaction field `foreignAssets` the assetId, otherwise the smart contract
+  // call the  method 'buy'. Note that we must specify in the transaction field `foreignAssets` the assetId, otherwise the smart contract
   // can't load it correctly. Same for the seller's address, which should be specified in the `accounts` field
   appTxn = algosdk.makeApplicationNoOpTxnFromObject({
     from: wallet2.addr,
     suggestedParams: suggestedParams,
     appIndex: appId,
-    appArgs: [new Uint8Array(Buffer.from('buyASA')),  algosdk.encodeUint64(assetIndex), algosdk.encodeUint64(amountAsset)],
+    appArgs: [new Uint8Array(Buffer.from('buy')),  algosdk.encodeUint64(assetIndex)],
     accounts: [wallet1.addr],                 // We need to specify the seller's account here, so that the smart contract can load it
     foreignAssets: [assetIndex]               // We need to specify the asset id in foreignAssets, so that the smart contract can load it
   });
@@ -143,8 +141,7 @@ async function main() {
     suggestedParams: suggestedParams,
     appIndex: appId,
     appArgs: [new Uint8Array(Buffer.from('setupSale')),
-     algosdk.encodeUint64(amountPayment),
-     algosdk.encodeUint64(amountAsset)
+     algosdk.encodeUint64(amountPayment)
      ],
     foreignAssets: [assetIndex]
     }
@@ -152,14 +149,14 @@ async function main() {
 
   await executeGroupTransaction(algoNode, [appTxn], [wallet2]);
   console.log('[X] Sale initialized');
-  console.log('[X] Sending payment from wallet 3 to smart contract. Calling `buyASA` method from wallet 3');
+  console.log('[X] Sending payment from wallet 3 to smart contract. Calling `buy` method from wallet 3');
 
   // call the created application
   appTxn = algosdk.makeApplicationNoOpTxnFromObject({
     from: wallet3.addr,
     suggestedParams: suggestedParams,
     appIndex: appId,
-    appArgs: [new Uint8Array(Buffer.from('buyASA')),  algosdk.encodeUint64(assetIndex), algosdk.encodeUint64(amountAsset)],
+    appArgs: [new Uint8Array(Buffer.from('buy')),  algosdk.encodeUint64(assetIndex)],
     accounts: [wallet2.addr],
     foreignAssets: [assetIndex]
   });

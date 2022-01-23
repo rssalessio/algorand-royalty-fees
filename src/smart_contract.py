@@ -22,7 +22,7 @@ class Constants:
 
 
 @Subroutine(TealType.none)
-def defaultTransactionChecks(txnId: Int) -> Expr:
+def defaultTransactionChecks(txnId: Int) -> TealType.none:
     """
     This subroutine is used to perform some default checks on the
     incoming transactions.
@@ -42,7 +42,7 @@ def defaultTransactionChecks(txnId: Int) -> Expr:
 
 
 @Subroutine(TealType.none)
-def sendPayment(receiver: Addr, amount: Int) -> Expr:
+def sendPayment(receiver: Addr, amount: Int) -> TealType.none:
     """
     This subroutine can be used to send payments from the smart
     contract to other accounts using inner transactions
@@ -63,7 +63,7 @@ def sendPayment(receiver: Addr, amount: Int) -> Expr:
 
 
 @Subroutine(TealType.none)
-def transferAsset(sender: Addr, receiver: Addr, assetId: Int) -> Expr:
+def transferAsset(sender: Addr, receiver: Addr, assetId: Int) -> TealType.none:
     """
     This subroutine can be used to transfer an asset
     from an account to another. 
@@ -80,7 +80,7 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int) -> Expr:
         InnerTxnBuilder.Begin(),
         InnerTxnBuilder.SetFields({
             TxnField.type_enum: TxnType.AssetTransfer,
-            TxnField.asset_amount: 1,
+            TxnField.asset_amount: Int(1),
             TxnField.asset_receiver: receiver,
             TxnField.asset_sender: sender,
             TxnField.xfer_asset: assetId,
@@ -89,17 +89,15 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int) -> Expr:
         InnerTxnBuilder.Submit(),
     ])
 
-@Subroutine(TealType.uint64)
-def checkNFTBalance(account: Addr, assetId: Int) -> TealType.uint64:
+@Subroutine(TealType.none)
+def checkNFTBalance(account: Addr, assetId: Int) -> TealType.none:
     """
     This subroutine checks that an account owns an NFT.
     Note that the asset id must also be passed in the ``foreignAssets``
     field in the outer transaction (otherwise you will get a reference error)
 
     :param Addr account  : The account to verify
-    :param Int assetId   : ASA Id
-    :return              : 1 if the account owns the NFT, otherwise an error is thrown
-    :rtype               : Int            
+    :param Int assetId   : ASA Id        
     """
     AssetAccountBalance = AssetHolding.balance(account, assetId)
     return Seq([
@@ -147,7 +145,7 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
     ])
 
 @Subroutine(TealType.none)
-def checkRoyaltyFeeComputation(amount: Int, royaltyFee: Int) -> Expr:
+def checkRoyaltyFeeComputation(amount: Int, royaltyFee: Int) -> TealType.none:
     """
     This subroutine checks that there are no problems computing the
     royalty fee  given a specific ``amount`` and the predefined ``royaltyFee``.
@@ -232,7 +230,7 @@ def approval_program():
     buyer = Gtxn[0].sender()
     # Logic
     buy = Seq([
-        Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 2 arguments
+        Assert(Gtxn[0].application_args.length() == Int(2)),                                  # Check that there are 2 arguments
         Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
         Assert(Gtxn[1].type_enum() == TxnType.Payment),                                       # Check that the second transaction is a payment
         Assert(App.globalGet(Constants.AssetId) == Btoi(Gtxn[0].application_args[1])),        # Check that the assetId is correct
@@ -277,7 +275,7 @@ def approval_program():
         Assert(amountToBePaid - serviceCost > feesToBePaid.load()),
         transferAsset(seller,                                                           # Transfer asset
                       Gtxn[0].sender(),
-                      App.globalGet(Constants.AssetId), amountAssetToBeTransfered),
+                      App.globalGet(Constants.AssetId)),
         sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid.load()),        # Pay seller
         App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid.load()),    # Collect fees
         App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
