@@ -9,10 +9,9 @@ class Constants:
     Creator           = Bytes("Creator")               # Identified the account of the Asset creator, stored globally
     AssetId           = Bytes("AssetId")               # ID of the asset, stored globally
     amountPayment     = Bytes("amountPayment")         # Amount to be paid for the asset, stored locally on the seller's account
-    amountASA         = Bytes("amountASA")             # Amount of asset sold, stored locally on the seller's account
     approveTransfer   = Bytes("approveTransfer")       # Approval variable, stored on the seller's and the buyer's accounts
     setupSale         = Bytes("setupSale")             # Method call
-    buyASA            = Bytes("buyASA")                # Method call
+    buy               = Bytes("buy")                   # Method call
     executeTransfer   = Bytes("executeTransfer")       # Method call
     royaltyFee        = Bytes("royaltyFee")            # Royalty fee in thousands
     waitingTime       = Bytes("waitingTime")           # Number of rounds to wait before the seller can force the transaction
@@ -64,7 +63,7 @@ def sendPayment(receiver: Addr, amount: Int) -> Expr:
 
 
 @Subroutine(TealType.none)
-def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Expr:
+def transferAsset(sender: Addr, receiver: Addr, assetId: Int) -> Expr:
     """
     This subroutine can be used to transfer an asset
     from an account to another. 
@@ -76,14 +75,12 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
     :param Addr receiver : Asset receiver
     :param Int assetId   : ID of the asset. Note that the id must also be passed in the ``foreignAssets``
                            field in the outer transaction (otherwise you will get a reference error)
-    :param Int amount    : The amount of the asset to be transferred. A zero amount transferred to self allocates
-                           that asset in the account's Asset map.
     """
     return Seq([
         InnerTxnBuilder.Begin(),
         InnerTxnBuilder.SetFields({
             TxnField.type_enum: TxnType.AssetTransfer,
-            TxnField.asset_amount: amount,
+            TxnField.asset_amount: 1,
             TxnField.asset_receiver: receiver,
             TxnField.asset_sender: sender,
             TxnField.xfer_asset: assetId,
@@ -93,25 +90,22 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
     ])
 
 @Subroutine(TealType.uint64)
-def getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64:
+def checkNFTBalance(account: Addr, assetId: Int) -> TealType.uint64:
     """
-    This subroutine returns the amount of ASA held by a certain
-    account. Note that the asset id must also be passed in the ``foreignAssets``
+    This subroutine checks that an account owns an NFT.
+    Note that the asset id must also be passed in the ``foreignAssets``
     field in the outer transaction (otherwise you will get a reference error)
 
     :param Addr account  : The account to verify
     :param Int assetId   : ASA Id
-    :return              : Amount of ASA held by the account
-                           Returns 0 if the account does not have
-                           any ASA of type ``assetId``.
+    :return              : 1 if the account owns the NFT, otherwise an error is thrown
     :rtype               : Int            
     """
     AssetAccountBalance = AssetHolding.balance(account, assetId)
     return Seq([
         AssetAccountBalance,
-        If(AssetAccountBalance.hasValue() == Int(1)) \
-        .Then(AssetAccountBalance.value())           \
-        .Else(Int(0))
+        Assert(AssetAccountBalance.hasValue() == Int(1)),
+        Assert(AssetAccountBalance.value() == Int(1))
     ])
 
 
@@ -196,69 +190,58 @@ def approval_program():
         Approve()
     ])
 
-    # [Step 2] Sequence that sets up the sale of an ASA
-    # There should be 3 arguments: 
+    # [Step 2] Sequence that sets up the sale of an NFT
+    # There should be 2 arguments: 
     #   1. The first argument is the command to execute, in this case "setupSale"
     #   2. The second one is the payment amount
-    #   3. The third one is the amount of ASA transfered
-    # We first verify the the seller has enough ASA to sell, and then we locally save the arguments
+    # We first verify the the seller owns the NFT, and then we locally save the arguments
     priceArg = Btoi(Txn.application_args[1])
-    amountOfASAArg = Btoi(Txn.application_args[2])
     assetClawback = AssetParam.clawback(App.globalGet(Constants.AssetId))
     assetFreeze = AssetParam.freeze(App.globalGet(Constants.AssetId))
     setupSale = Seq([
-        Assert(Txn.application_args.length() == Int(3)),                                      # Check that there are 3 arguments
+        Assert(Txn.application_args.length() == Int(2)),                                      # Check that there are 2 arguments
         Assert(Global.group_size() == Int(1)),                                                # Verify that it is only 1 transaction
         defaultTransactionChecks(Int(0)),                                                     # Perform default transaction checks
-        Assert(priceArg != Int(0)),                                                           # Check that the price is different than 0
-        Assert(amountOfASAArg != Int(0)),                                                     # Check that the amount of ASA to transfer is different than 0                
+        Assert(priceArg > Int(0)),                                                            # Check that the price is greater than 0              
         assetClawback,                                                                        # Verify that the clawback address is the contract
         Assert(assetClawback.hasValue()),
         Assert(assetClawback.value() == Global.current_application_address()),
         assetFreeze,                                                                          # Verify that the freeze address is the contract
         Assert(assetFreeze.hasValue()),
-        Assert(assetFreeze.value() == Global.current_application_address()),
-        Assert(                                                                               # Verify that the seller has enough ASA to sell
-            getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId))
-                >=  amountOfASAArg),
+        Assert(assetFreeze.value() == Global.current_application_address()),    
+        checkNFTBalance(Txn.sender(), App.globalGet(Constants.AssetId)),                      # Verify that the seller owns the NFT
         Assert(priceArg > serviceCost),                                                       # Check that the price is greater than the service cost
         App.localPut(Txn.sender(), Constants.amountPayment, priceArg),                        # Save the price
-        App.localPut(Txn.sender(), Constants.amountASA, amountOfASAArg),                      # Save the amount of ASA to transfer
         App.localPut(Txn.sender(), Constants.approveTransfer, Int(0)),                        # Reject transfer until payment is done
         Approve()
     ])
 
 
-    # [Step 3] Sequence that approves the payment for the ASA
+    # [Step 3] Sequence that approves the payment
     # This step requires 2 transaction.
-    # The first transaction is a NoOp App call transaction. There should be 3 arguments: 
-    #   1. The first argument is the command to execute, in this case "buyASA"
+    # The first transaction is a NoOp App call transaction. There should be 2 arguments: 
+    #   1. The first argument is the command to execute, in this case "buy"
     #   2. The second argument is the asset id
-    #   3. The third argument is the amount of ASA to buy
     # Moreover, in the first transaction we also pass the seller's address
     # The second transaction is a payment (the receiver is the app).
 
     # Save some useful variables
     seller = Gtxn[0].accounts[1]                                                              # Save seller's address
     amountToBePaid = App.localGet(seller, Constants.amountPayment)                            # Amount to be paid
-    amountAssetToBeTransfered = App.localGet(seller, Constants.amountASA)                     # Amount of ASA
     approval = App.localGet(seller, Constants.approveTransfer)                                # Variable that checks if the transfer has alraedy been approved
     buyer = Gtxn[0].sender()
     # Logic
-    buyASA = Seq([
-        Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 3 arguments
+    buy = Seq([
+        Assert(Gtxn[0].application_args.length() == Int(3)),                                  # Check that there are 2 arguments
         Assert(Global.group_size() == Int(2)),                                                # Check that there are 2 transactions
         Assert(Gtxn[1].type_enum() == TxnType.Payment),                                       # Check that the second transaction is a payment
         Assert(App.globalGet(Constants.AssetId) == Btoi(Gtxn[0].application_args[1])),        # Check that the assetId is correct
         Assert(approval == Int(0)),                                                           # Check that the transfer has not been issued yet
         Assert(amountToBePaid == Gtxn[1].amount()),                                           # Check that the amount to be paid is correct
-        Assert(amountAssetToBeTransfered == Btoi(Gtxn[0].application_args[2])),               # Check that there amount of ASA to sell is correct
         Assert(Global.current_application_address() == Gtxn[1].receiver()),                   # Check that the receiver of the payment is the App
         defaultTransactionChecks(Int(0)),                                                     # Perform default transaction checks
         defaultTransactionChecks(Int(1)),                                                     # Perform default transaction checks
-        Assert(                                                                               # Verify that the seller has enough ASA to sell
-            getAccountASABalance(seller, App.globalGet(Constants.AssetId))              
-                >=  amountAssetToBeTransfered),
+        checkNFTBalance(seller, App.globalGet(Constants.AssetId)),                            # Check that the seller owns the NFT
         Assert(buyer != seller),                                                              # Make sure the seller is not the buyer!
         App.localPut(seller, Constants.approveTransfer, Int(1)),                              # Approve the transfer from seller' side
         App.localPut(buyer, Constants.approveTransfer, Int(1)),                               # Approve the transfer from buyer' side
@@ -266,7 +249,7 @@ def approval_program():
         Approve()
     ])
 
-    # [Step 4] Sequence that transfers the ASA, pays the seller and sends royalty fees to the creator
+    # [Step 4] Sequence that transfers the NFT, pays the seller and sends royalty fees to the creator
     # This step requires 1 transaction.
     # The  transaction is a NoOp App call transaction. There should be 1 arguments
     #   1. The first argument is the command to execute, in this case "executeTransfer"
@@ -285,9 +268,7 @@ def approval_program():
             Global.round() > App.globalGet(Constants.waitingTime)                       # Alternatively, the seller can force the transaction if enough
                 + App.localGet(seller, Constants.roundSaleBegan))),                     # time has passed
         Assert(serviceCost < amountToBePaid),                                           # Check underflow
-        Assert(                                                                         # Verify that the seller has enough ASA to sell
-            getAccountASABalance(seller, App.globalGet(Constants.AssetId))
-                >=  amountAssetToBeTransfered),
+        checkNFTBalance(seller, App.globalGet(Constants.AssetId)),                      # Check that the seller owns the NFT
         feesToBePaid.store(                                                             # Reduce number of subroutine calls by saving the variable inside a scratchvar variable
             If(seller == App.globalGet(Constants.Creator)).Then(Int(0))                 # Compute royalty fees: if the seller is the creator, the fees are 0
             .Else(computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee))),        
@@ -300,7 +281,6 @@ def approval_program():
         sendPayment(seller, amountToBePaid - serviceCost - feesToBePaid.load()),        # Pay seller
         App.globalPut(Constants.collectedFees, collectedFees + feesToBePaid.load()),    # Collect fees
         App.localDel(seller, Constants.amountPayment),                                  # Delete local variables
-        App.localDel(seller, Constants.amountASA),
         App.localDel(seller, Constants.approveTransfer),
         App.localDel(buyer, Constants.approveTransfer),
         Approve()
@@ -338,15 +318,17 @@ def approval_program():
     ])
     
     # onCall Sequence
-    # Checks that the first transaction is an Application call, and then checks
-    # the first argument of the call. The first argument must be a valid value between
-    # "setupSale", "buyASA", "executeTransfer", "refund" and "claimFees"
-    onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())                        \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.setupSale).Then(setupSale)              \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.buyASA).Then(buyASA)                    \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.executeTransfer).Then(executeTransfer)  \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.refund).Then(refund)                    \
-             .ElseIf(Gtxn[0].application_args[0] == Constants.claimFees).Then(claimFees)              \
+    # Checks that the first transaction is an Application call, and that there is at least 1 argument.
+    # Then it checks the first argument of the call. The first argument must be a valid value between
+    # "setupSale", "buy", "executeTransfer", "refund" and "claimFees"
+    onCall = If(Or(Txn.type_enum() != TxnType.ApplicationCall,
+                   Txn.application_args.length() == Int(0))
+                ).Then(Reject())                                                                  \
+             .ElseIf(Txn.application_args[0] == Constants.setupSale).Then(setupSale)              \
+             .ElseIf(Txn.application_args[0] == Constants.buy).Then(buy)                          \
+             .ElseIf(Txn.application_args[0] == Constants.executeTransfer).Then(executeTransfer)  \
+             .ElseIf(Txn.application_args[0] == Constants.refund).Then(refund)                    \
+             .ElseIf(Txn.application_args[0] == Constants.claimFees).Then(claimFees)              \
              .Else(Reject())
              
 
