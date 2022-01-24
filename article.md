@@ -499,8 +499,8 @@ claimFees = Seq([
 ```
 
 
-### 3.7 Possible changes and missing checks
-Several possible changes can be made, depending on the needs.
+### 3.7 Possible changes
+Several changes can be made, depending on the needs.
 
 1. First, note that the code is not intended to be production-ready.
 
@@ -544,33 +544,37 @@ goal asset send --amount 0 --to $WALLET3_ADDR --from $WALLET3_ADDR --assetid $AS
 Now lets deploy the smart contract using ``wallet1``, and make all the wallets opt-in the app.
 
 ```python
-# Royalty fee 3.5%, in thousands
+# Royalty fee 3.5%
 ROYALTY_FEE=35
+
+# Number of rounds to wait until the seller can force the transaction
+WAITING_TIME=15
 
 # compile PyTeal into TEAL
 python3 src/smart_contract.py src/approval.teal src/clear.teal
 
 # create app
 GLOBAL_BYTES_SLICES=1
-GLOBAL_INTS=3
+GLOBAL_INTS=4
 LOCAL_BYTES_SLICES=0
 LOCAL_INTS=3
 
 export APP_ID=$(
   goal app create --creator "$WALLET1_ADDR" \
-    --approval-prog src/approval.teal \
-    --clear-prog src/clear.teal \
+    --approval-prog "$TEAL_APPROVAL" \
+    --clear-prog "$TEAL_CLEAR" \
     --global-byteslices "$GLOBAL_BYTES_SLICES" \
     --global-ints "$GLOBAL_INTS" \
     --local-byteslices "$LOCAL_BYTES_SLICES" \
     --local-ints "$LOCAL_INTS" \
     --app-arg addr:$WALLET1_ADDR \
     --app-arg int:$ASSET_ID \
-    --app-arg int:$ROYALTY_FEE |
+    --app-arg int:$ROYALTY_FEE \
+    --app-arg int:$WAITING_TIME \
+    --foreign-asset $ASSET_ID |
     grep Created |
     awk '{ print $6 }'
 )
-
 
 # Export App Address
 export APP_ADDRESS=$(goal app info  --app-id "$APP_ID" | awk '{print $3}' | head -2 | tail -1)
@@ -591,23 +595,22 @@ goal app optin --app-id $APP_ID --from $WALLET3_ADDR
 ### 4.3 Simulate sale from ``wallet1`` to ``wallet2``
 Here the sale from ``wallet1`` to ``wallet2`` is simulated. 
 
-Lets first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. 3 arguments are passed: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, the asset id must be specified using the ``--foreign-asset`` command.
+Lets first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. 2 arguments are passed: (1) ``setupSale``, (2) the price. Moreover, the asset id must be specified using the ``--foreign-asset`` command.
 
 
 ```python
-NFT_AMOUNT=1
 NFT_PRICE=1000000
-goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
+goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --foreign-asset $ASSET_ID
 ```
 
-Now lets pay the contract using ``wallet2`` by make a group transaction:
-1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, the asset id need to be specified using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
+Now lets pay the contract using ``wallet2`` by making a group transaction:
+1. The first transaction calls the ``buy`` method in the contract. There are 2 arguments: (1) ``setupSale``, (2) the asset id. Moreover, the asset id need to be specified using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
 2. The second transaction is a payment. The total amount is paid directly the contract.
 
 
 ```python
 # App call transaction
-goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:buyASA --app-arg int:$ASSET_ID --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID --app-account $WALLET1_ADDR --out txnAppCall.tx
+goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:buy --app-arg int:$ASSET_ID  --foreign-asset $ASSET_ID --app-account $WALLET1_ADDR --out txnAppCall.tx
 
 # Payment transaction
 goal clerk send --amount $NFT_PRICE --to $APP_ADDRESS --from $WALLET2_ADDR --out txnPayment.tx
@@ -630,24 +633,7 @@ Now it can be verified that ``wallet2`` owns the asset
 goal account info -a $WALLET2_ADDR
 ```
 
-Whereas the global state of the app can be verified to check the collected fees
-```python
-goal app read --global --app-id $APP_ID
-```
-
-And collected fees would be as
-```python
- "collectedFees": {
-    "tt": 2,
-    "ui": 34930
-  },
-```
-
-which is the correct amount, since the price is ``1000000``, the service cost is ``2000`` and the royalty fee is 3.5%, therefore ``(1000000-2000) * 0.035=34930``.
-(Note that the service cost is 2000 because the smart contract has to do 2 transactions).
-
-
-Alternatively, ``wallet2`` can get a refund by executing the following command (the seller's address needs to be specified using the ``-app-account`` flag).
+Alternatively, ``wallet2`` could have got a refund by executing the following command (the seller's address needs to be specified using the ``-app-account`` flag).
 
 ```python
 goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:refund --app-account $WALLET1_ADDR
@@ -656,21 +642,21 @@ goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:refund --app-a
 ### 4.4 Simulate sale from ``wallet2`` to ``wallet3``
 Now lets simulate the sale from ``wallet2`` to ``wallet3``. 
 
-Again, the ``setupSale`` method is called using ``wallet2``. 3 arguments must be passed: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, its also requierd to specify the asset id using the ``--foreign-asset`` command.
+Again, the ``setupSale`` method is called using ``wallet2``. 2 arguments must be passed: (1) ``setupSale`` and the (2) the price. Moreover, its also requierd to specify the asset id using the ``--foreign-asset`` command.
 
 Same parameters are used as before for simplicity.
 ```python
-goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
+goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --foreign-asset $ASSET_ID
 ```
 
 Now lets pay the contract using ``wallet3`` by means of a group transaction:
-1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, its also required to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
+1. The first transaction calls the ``buy`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, its also required to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
 2. The second transaction is payment of total amount, directly to the contract.
 
 
 ```python
 # App call transaction
-goal app call --app-id $APP_ID --from $WALLET3_ADDR --app-arg str:buyASA --app-arg int:$ASSET_ID --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID --app-account $WALLET2_ADDR --out txnAppCall.tx
+goal app call --app-id $APP_ID --from $WALLET3_ADDR --app-arg str:buy --app-arg int:$ASSET_ID --foreign-asset $ASSET_ID --app-account $WALLET2_ADDR --out txnAppCall.tx
 
 # Payment transaction
 goal clerk send --amount $NFT_PRICE --to $APP_ADDRESS --from $WALLET3_ADDR --out txnPayment.tx
@@ -693,15 +679,18 @@ Now code verifies that ``wallet3`` owns the asset using the command ``goal accou
 
 It's also verified that the global state of the app to check the amount of collected fees using the command``goal app read --global --app-id $APP_ID``
 
-And collected fees would be as
+And collected fees are
 ```python
  "collectedFees": {
     "tt": 2,
-    "ui": 69860
+    "ui": 34930
   },
 ```
 
-which is the correct amount. The creator (``wallet1``) can reclaim the fees using
+which is the correct amount, since the price is ``1000000``, the service cost is ``2000`` and the royalty fee is 3.5%, therefore ``(1000000-2000) * 0.035=34930`` (Note that the service cost is 2000 because the smart contract has to do 2 transactions).
+
+
+Finally, the creator (``wallet1``) can reclaim the fees using
 
 ```python
 goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:claimFees
