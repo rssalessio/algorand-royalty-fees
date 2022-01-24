@@ -44,7 +44,7 @@ Unfortunately, Royalty Fees are either not yet fully supported or completely una
 
 The method is also described in the following UML diagram
 
-![EditorImages/2021/12/04 14:05/algorand_royalty_fees_scheme.drawio.jpg](https://algorand-devloper-portal-app.s3.amazonaws.com/static/EditorImages/2021/12/04%2014%3A05/algorand_royalty_fees_scheme.drawio.jpg)
+![RoyaltyFeeScheme](https://github.com/rssalessio/algorand-royalty-fees/raw/main/imgs/algorand_royalty_fees_scheme.jpg)
 
 # Steps
 
