@@ -1,65 +1,58 @@
 # Royalty Fees on Algorand
-This is a short tutorial that explains how to implement Royalty Fees using [Inner Transactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) and [Teal v5](https://developer.algorand.org/docs/get-details/dapps/avm/teal/) capabilities in Algorand.
-The smart contract has been written in [PyTeal](https://pyteal.readthedocs.io/), and all the examples are written using Typescript.
+This is a short tutorial that explains how to implement Royalty Fees for Algorand [NFTs](https://www.algorand.com/resources/blog/the-enduring-value-of-nfts-on-algorand) using [Teal v5](https://developer.algorand.org/docs/get-details/dapps/avm/teal/) and new features like [Inner Transactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions).
+
+It's assumed that readers have sufficient programming knowledge, general familiarity with blockchain technology and Algorand terminology. Smart contracts are written in [PyTeal](https://pyteal.readthedocs.io/), and examples in Typescript.
 
 
-Please refer to the original [GitHub Repo](https://github.com/rssalessio/algorand-royalty-fees) for more information!
+
+To get codes used during this tutorial, please refer to [GitHub repository](https://github.com/rssalessio/algorand-royalty-fees)!
 
 # Requirements
-
-We assume that the reader has programming knowledge, and that she/he is already familiarity with Blockchains technology.  Please, check [README file](https://github.com/rssalessio/algorand-royalty-fees/blob/main/README.md) for more instructions.
-
-Requirements:
 
 1. Have a running [Algorand node](https://developer.algorand.org/docs/run-a-node/setup/install), or [use the sandbox](https://github.com/algorand/sandbox)
     * You can use the script ``scripts/start_network.sh`` to start a private network with all the wallets/variables already initialized.
     * To use the script type ``source scripts/start_network.sh`` from the root folder.
-2. Having PyTeal installed (requires python 3)
+2. Having [PyTeal installed](https://pyteal.readthedocs.io/en/stable/installation.html) (requires python 3)
 3. [_Optional_] If you want to run the example script in ``src/examples.ts`` you need to install [Node-js](https://nodejs.org/)
-    * After installing Node you need to install the following libraries:  ``algosdk``, ``typescript`` and ``ts-node``.
+    * After installing Node you need to install the following libraries:  ``algosdk``, ``typescript``, and ``ts-node``.
 
 # Background
 
 ## 1. Introduction
-**Royalty Fees play a huge role in the future of Blockchains, since they enable the possibility of guaranteeing fees  on second sales of an asset.** Unfortunately, Royalty Fees are yet not fully implemented on Blokchains. 
+**Royalty Fees play a huge role in the future of NFT sales on Blockchains, since they enable the possibility of guaranteeing fees on second sales of an NFT for original authors.**
 
-For example, [in Ethereum it is not possible to enforce Royalty fees on second sales](https://eips.ethereum.org/EIPS/eip-2981). As a consequence, marketplaces in Ethereum have to implement an internal solution to provide Royalty Fees, which can be easily avoided if the users avoid selling on that specific marketplace.
+Unfortunately, Royalty Fees are either not yet fully supported or completely unavailable on many blockchains. For example, [in Ethereum it is not possible to enforce Royalty fees on second sales](https://eips.ethereum.org/EIPS/eip-2981) and as of consequences, marketplaces in Ethereum have to implement an internal (off-chain and therefore mostly centralized) solution to provide Royalty Fees, which can be easily cheated if the users avoid selling on that specific marketplace.
 
-**Algorand on the other hand has some features that make it a candidate blockchain where to implement Royalty Fees**. These features are:
+**Algorand on the other hand has provided many features that make it a very good candidate blockchain to implement Royalty Fees**. These features are:
 1. Possibility to freeze an asset, and block the transfer of an asset
 2. Possibility to send transactions and move assets using smart contracts (Teal 5)
+3. Even for migrated or bridged NFTs, the logic to control sales and after-sales steps and behavior can still be governed by smart contracts on Algorand.
 
-**An earlier project on Algorand, [Algorealm](https://github.com/cusma/algorealm), shows a first implementation of Royalty Fees on Algorand by using a [**clawback** address](https://developer.algorand.org/docs/get-details/transactions/transactions#clawbackaddr) and Teal v2**. However, the smart contract implemented in Algorealm  (which is the union of a [Stateful App](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/) and 1 [Smart signature](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/smartsigs/)) only accepts or rejects the transfer of an asset, and it is not able to  compute automatically a royalty fee, or to automatically move an asset. In their proposal they make use of a smart contract that allows the transfer of an asset only upon payment of a specific royalty fee. Because of these limitations, their implementation is application-specific, and hard to scale.
+**An earlier epic project on Algorand, [Algorealm](https://github.com/cusma/algorealm), shows an innovative first implementation of Royalty Fees on Algorand by using a [**clawback** address](https://developer.algorand.org/docs/get-details/transactions/transactions#clawbackaddr) and Teal v2**. However, the smart contract implemented in Algorealm  (which is the union of a [Stateful App](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/) and a [Smart signature](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/smartsigs/)) can only approve or reject the transfer of an asset, without automatic calculation of royalty fee, or automatic transfer of an asset within the contract (because of limitations of TEAL V2). In their proposal, they make use of a smart contract that allows the transfer of an asset only upon payment of a pre-specified royalty fee. Because of these limitations, their implementation was more of static nature, application-specific, and therefore hard to scale.
 
-**Now it is possible to do much better by exploiting the capabilities of Teal v5**. It is possible to implement only 1 [stateful App](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/) that handles automatically the payment of royalty fees, and the transfer of assets using [Inner Transactcions](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/?from_query=inner%20transactions#inner-transactions).
+**Now, by exploiting the capabilities of Teal v5**, It is possible to do much more and implement through a single [stateful smart contract Application](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/) that automatically handles the payment of royalty fees, and the transfer of assets using [Inner Transactcions](https://developer.algorand.org/docs/get-details/dapps/smart-contracts/apps/?from_query=inner%20transactions#inner-transactions).
 
 ## 2. Method to collect royalty fees
-**Roughly speaking, the method works as follows:**
-1. The seller sets up an asset for sale on the App (the smart contract)
-2. The buyer pays the amount specified by the seller to the App
-3. If the buyer is fully convinced he/she can continue with the payment
-    * The asset is transfered from the seller to the buyer
-    * The app pays the seller the total amount minus the royalty fees
-    * Royalty fees are collected in the App. The owner of the royalty fees (the Creator of the asset) can redeem the royalty fees whenever he/she wants.
 
-The method is also described the following UML diagram
+1. The seller sets an asset up for sale on the App (the stateful smart contract).
+2. The buyer pays the amount specified by the seller to the App.
+3. The buyer receives the payment.
+4. The asset is transferred from the seller to the buyer.
+5. The app pays the seller the total amount minus the royalty fees (If applicable by being second sales). The full total amount would be paid to the seller if that's the first sale.
+6. Royalty fees are collected in the App. The owner of the royalty fees (the Creator of the asset) can redeem the royalty fees whenever desired.
 
-![EditorImages/2021/12/04 14:05/algorand_royalty_fees_scheme.drawio.jpg](https://algorand-devloper-portal-app.s3.amazonaws.com/static/EditorImages/2021/12/04%2014%3A05/algorand_royalty_fees_scheme.drawio.jpg) 
+The method is also described in the following UML diagram
 
-
-
-One may wonder why it is necessary for the Buyer to first pay and then finalize the transfer. I personally prefer it this way. How many times you bought something and then you regretted doing so?
-
-In case you don't like this solution, it is still possible to combine all the steps together (I will explain this later).
+![EditorImages/2021/12/04 14:05/algorand_royalty_fees_scheme.drawio.jpg](https://algorand-devloper-portal-app.s3.amazonaws.com/static/EditorImages/2021/12/04%2014%3A05/algorand_royalty_fees_scheme.drawio.jpg)
 
 # Steps
 
 ## 3. Creating the contract (approval program)
-The smart contract  consists of an approval program and a clearance program. The latter simply returns 1 to all requests, therefore we just focus on the former.
+The smart contract consists of an approval program and a clearance program. The latter simply approves all requests, therefore let's just focus on the former.
 
-We assume for simplicity that the contract is deployed directly by the creator of the asset, the one that will collect all royalty fees. In this way the smart contract can be directly intialized by the creator.
+For simplicity, it's assumed that the contract is deployed directly by the creator of the asset, the one that will collect all royalty fees.
 
-We start by defining a list of constants that will turn out to be useful while developing the App.
+Let's start by defining a list of constants that will be used in smart contract app development.
 
 ```python
 from pyteal import *
@@ -83,13 +76,12 @@ class Constants:
     refund            = Bytes("refund")          # Method call
 ```
 
-After having defined the list of constants, we can write the piece of code that is executed upon calling the contract.
-We define the ```python approval_program()``` function, which contains the code executed by the App. This function returns the following piece of code
+After having defined the list of constants, let's write the stateful smart contract with pyteal using ```python approval_program()``` function.
 
 ```python
 # Check the transaction type and execute the corresponding code
-#   1. If application_id() is 0 then the program has just been created, so we initialize it
-#   2. If on_completion() is 0 we execute the onCall code
+#   1. If application_id() is 0 then the program has just been created, therefore initializing it
+#   2. If on_completion() is 0 then execute the onCall code
 return If(Txn.application_id() == Int(0)).Then(initialize)                  \
         .ElseIf(Txn.on_completion() == OnComplete.CloseOut).Then(Approve()) \
         .ElseIf(Txn.on_completion() == OnComplete.OptIn).Then(Approve())    \
@@ -97,7 +89,7 @@ return If(Txn.application_id() == Int(0)).Then(initialize)                  \
         .Else(Reject())
 ```
 
-We start by checking if the App has just been initialized. If so we call the sequence contained in the variable ``initialize``. On ``CloseOut`` or ``OptIn`` we simply approve the transaction. Otherwise, if it is a [``NoOp`` transaction](https://developer.algorand.org/docs/get-details/transactions/#application-noop-transaction), we execute the code in ``onCall``.
+Let's start by checking if the App has just been initialized. If so then call the sequence contained in the variable ``initialize``. On ``CloseOut`` or ``OptIn`` the code simply approves the transaction. Otherwise, if it is a [``NoOp`` transaction](https://developer.algorand.org/docs/get-details/transactions/#application-noop-transaction), then the code executes the block in ``onCall``.
 
 The ``initialize`` sequence is defined as follows
 
@@ -106,7 +98,7 @@ The ``initialize`` sequence is defined as follows
 royaltyFeeArg = Btoi(Txn.application_args[2])
 initialize = Seq([
     Assert(Txn.type_enum() == TxnType.ApplicationCall),             # Check if it's an application call
-    Assert(Txn.application_args.length() == Int(3)),                # We need 3 arguments, Creator, AssetId and Royalty Fee
+    Assert(Txn.application_args.length() == Int(3)),                # Needs 3 arguments, Creator, AssetId and Royalty Fee
     Assert(royaltyFeeArg >= Int(0) and royaltyFeeArg <= Int(1000)), # verify that the Royalty fee is in [0, 1000]
     App.globalPut(Constants.Creator, Txn.application_args[0]),      # Save the initial creator
     App.globalPut(Constants.AssetId, Btoi(Txn.application_args[1])),# Save the asset ID
@@ -114,7 +106,7 @@ initialize = Seq([
     Approve()
 ])
 ```
-In the ``initialize`` sequence we expect 3 arguments: (1) the wallet's address of the creator, (2) the asset ID and the (3) royalty fee in thousands. We save all these variables in the global state of the contract (2 integers and 1 Bytes slice).
+In the ``initialize`` sequence 3 arguments are expected: (1) the wallet's address of the creator, (2) the asset ID, and the (3) royalty fee in thousands. All these variables are stored in the global state of the contract (2 integers and 1 Byte slice).
 
 
 
@@ -134,29 +126,29 @@ onCall = If(Gtxn[0].type_enum() != TxnType.ApplicationCall).Then(Reject())      
          .Else(Reject())
 ```
 
-First, we check that the user called the smart contract correctly. Then we check the first argument of ``application_args`` (we use the first argument to discriminate between the various operations). As you can see in the code there is a list of ``ElseIf`` statementents that are used to distinguish between the various values. The accepted values are ``setupSale, buyASA, executeTransfer, refund, claimFees``.
+First, let's check that the user called the smart contract correctly. Then code checks the first argument of ``application_args`` (we use the first argument to discriminate between the various operations). As seen in the code there is a list of ``ElseIf`` statements that are used to distinguish between the various values. The accepted values are ``setupSale, buyASA, executeTransfer, refund, claimFees``.
 
 1. ``setupSale`` Can be called by any user, and it is used to set up a new sale.
 2. ``buyASA`` Any user that wants to buy the asset needs to call this method first.
 3. ``executeTransfer`` After paying, the buyer can finalize by transfering the asset to his/her wallet. Alternatively, the user can get the money back by calling the ``refund method``
-4. ``refund`` This method can be used by the buyter to get the money back
+4. ``refund`` This method can be used by the buyer to get the money back
 5. ``claimFees`` This method can only be called by the creator of the asset to collect royalty fees
 
-Note that we obviously reject all other undefined requests. 
+Note rejection of all other undefined requests.
 
-We will now go thorugh these 5 methods, but, before doing so, we first define some useful subroutines that will come in handy later on.
+Before going through these 5 methods, first, let's define some useful subroutines that will be used later on.
 
-### 3.1 SetupSale method
+### 3.1 Setup sale method
 
-We begin by looking at the ``setupSale`` method. In this case the user (the seller) has to provide the sale price and the total amount of asset.
+Let's begin by looking at the ``setupSale`` method. In this case, the user (the seller) has to provide the sale price and the total amount of asset.
 
 ```python
 # [Step 2] Sequence that sets up the sale of an ASA
 # There should be 3 arguments: 
 #   1. The first argument is the command to execute, in this case "setupSale"
 #   2. The second one is the payment amount
-#   3. The third one is the amount of ASA transfered
-# We first verify the the seller has enough ASA to sell, and then we locally save the arguments
+#   3. The third one is the amount of ASA transferred
+# Let's first verify that the seller has enough ASA to sell, and then store the arguments locally
 priceArg = Btoi(Txn.application_args[1])
 amountOfASAArg = Btoi(Txn.application_args[2])
 setupSale = Seq([
@@ -175,34 +167,34 @@ setupSale = Seq([
 ])
 ```
 
-In the code above we start by doing some standard checks. Note that we use  the following code to check that the seller has indeed the asset available for sale
+The code above starts by doing some standard checks. Note that the following code is used to check whether the seller owns the asset set up for sale.
 
 ```python
 Assert(getAccountASABalance(Txn.sender(), App.globalGet(Constants.AssetId)) >=  amountOfASAArg),
 ```
 
-where ``getAccountASABalance`` is a subRoutine that we can use to retrieve the amount of asset held by a certain wallet. We will give a look to this subroutine later in section  3.6.
-The code ends by checking that the sale price is greater than the service cost (which is 2000 microalgo in this case), and we save in the local account of the seller these variables. We also save the ``approveTransfer`` variable, and set it equal to 0.
+The ``getAccountASABalance`` is a subRoutine that can be used to retrieve the amount of asset held by a certain wallet. This subroutine will be revisited later in section  3.6.
+The code ends by checking that the sale price is greater than the service cost (which is 2000 micro algos in this case), and store it in the local account of the seller these variables. The ``approveTransfer`` variable's value is also stored in local state , and set it to 0.
 
 ### 3.2 BuyASA method
 
-The next method we look at is the ``buyASA`` method. Calling this method requires 2 transaction:
+The next subroutine is the ``buyASA`` method. Calling this method requires 2 transactions:
 
-1. The first one is a NoOp application call with 3 arguments: the "buyASA" argument, the asset id and the amount of ASA to buy
+1. The first one is a NoOp application call with 3 arguments: the "buyASA" argument, the asset id, and the amount of ASA to buy
 2. The second transaction is a payment (that pays the full price). The receiver is the contract itself.
 
-The code starts by loading some useful variables (the seller address, the amount to be paid, etc...) and does some standard checks. We make sure that the seller has not approved another buyer, and that the seller holds enough ASA. 
+The code starts by loading some useful variables (the seller address, the amount to be paid, etc...) and does some standard checks. Code makes sure that the seller has not approved another buyer, and that the seller holds enough ASA. 
 
-If all conditions are satisfied,  we approve the transfer from both the seller's and buyer's perspectives. At this point the buyer only needs to finalize the transaction to transfer the asset.
+If all conditions are satisfied,  then code approves the transfer from both the seller's and buyer's perspectives. At this point, the buyer only needs to finalize the transaction to transfer the asset.
 
 ```python
 # [Step 3] Sequence that approves the payment for the ASA
-# This step requires 2 transaction.
+# This step requires 2 transactions.
 # The first transaction is a NoOp App call transaction. There should be 3 arguments: 
-#   1. The first argument is the command to execute, in this case "buyASA"
+#   1. The first argument is the command to execute, in this case, "buyASA"
 #   2. The second argument is the asset id
 #   3. The third argument is the amount of ASA to buy
-# Moreover, in the first transaction we also pass the seller's address
+# Moreover, in the first transaction the seller's address is also passed.
 # The second transaction is a payment (the receiver is the app).
 
 # Save some useful variables
@@ -229,17 +221,17 @@ buyASA = Seq([
 ])
 ```
 ### 3.3 ExecuteTransfer method
-Finally, we have the sequence that finalizes the transfer. At this point the buyer is still able to get back the money, and cancel the transfer. If the buyer calls ``executeTransfer``, then the transfer is finalized. The asset is moved from the seller to the buyer, and the seller receives the payment minus the royalty fees.
+Finally, we have the sequence that finalizes the transfer. At this step, the buyer is still able to get the funds back and cancel the transfer. If the buyer calls ``executeTransfer``, then the transfer is finalized. The asset is moved from the seller to the buyer, and the seller receives the payment minus the royalty fees.
 
-We use the subroutine ``computeRoyaltyFee`` to compute the royalty fee given the total payment minus the service cost.
+We use the subroutine ``computeRoyaltyFee`` to compute the royalty fee given the total paid amount minus the service cost.
 
-Apart from the usual checks, we also make sure that both the seller and the buyer already approved the transaction. We then transfer the asset, and send the papyment to the seller using the subroutines ``transferAsset`` and ``sendPayment``. Finally, we conclude by collecting the royalty fees for the creator and by deleting all the local variables.
+Apart from the usual checks, we also make sure that both the seller and the buyer already approved the transaction. We then transfer the asset, and send the payment to the seller using the subroutines ``transferAsset`` and ``sendPayment``. Finally, we conclude by collecting the royalty fees for the creator and by deleting all the local variables.
 ```python
-# [Step 4] Sequence that transfers the ASA, pays the seller and sends royalty fees to the creator
+# [Step 4] Sequence that transfers the ASA, pays the seller, and sends royalty fees to the creator
 # This step requires 1 transaction.
-# The  transaction is a NoOp App call transaction. There should be 1 arguments
-#   1. The first argument is the command to execute, in this case "executeTransfer"
-# We also account for the serviceCost to pay the inner transaction
+# The transaction is a NoOp App call transaction so there should be only one argument.
+#   1. The first argument is the command to execute, in this case, "executeTransfer"
+# Code also accounts for the service cost to pay the inner transaction fees.
 royaltyFee = App.globalGet(Constants.royaltyFee)
 collectedFees = App.globalGet(Constants.collectedFees)
 feesToBePaid = computeRoyaltyFee(amountToBePaid - serviceCost, royaltyFee)
@@ -265,7 +257,7 @@ executeTransfer = Seq([
 ])
 ```
 ### 3.4 Refund Method
-In case the buyer has already paid, but not finalized the transaction using the ``executeTransfer`` sequence, it is still possible to claim back the funds by calling ``refund``. This sequence of code checks that the payment was done, and sends back to the buyer the total payment amount minus the transaction fee.
+In case the buyer has already paid, but has not finalized the transaction using the ``executeTransfer`` sequence, it is still possible to claim back the funds by calling ``refund``. This sequence of code checks that the payment was done, and sends back to the buyer the total payment amount minus the transaction fee.
 
 We end by cleaning the local variables.
 
@@ -290,7 +282,7 @@ Finally, we also create the ``claimFees`` method that can be called by the creat
 ```python
 # Claim Fees sequence
     # This sequence can be called only by the creator.  It is used to claim all the royalty fees
-    # It may fail if the contract has not enough algo to pay the inner transaction (the creator should take
+    # It may fail if the contract does not have enough funds to pay for the inner transaction fees (the creator should take
     # care of funding the contract in this case)
     claimFees = Seq([
         Assert(Global.group_size() == Int(1)),                                                 # Verify that it is only 1 transaction
@@ -304,8 +296,8 @@ Finally, we also create the ``claimFees`` method that can be called by the creat
 ```
 
 ### 3.6 Subroutines
-In this section I explain some of the subroutines that appears in the code. I use 4 subroutines
-1. ``sendPayment(receiver: Addr, amount: Int) -> Expr``: this subroutines sends a payment to a specific wallet
+In this section, let's explain four used subroutines that appear in the code:
+1. ``sendPayment(receiver: Addr, amount: Int) -> Expr``: this subroutine sends a payment to a specific wallet
 2. ``transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Expr``: this subroutine transfers an asset from a wallet to another (the app must be set as clawback address for the asset)
 3. ``getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64``: this subroutine is used to find the amount of asset held by a certain wallet
 4. ``computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64``: this subroutine computes the royalty fees given a certain price
@@ -343,8 +335,7 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
     This subroutine can be used to transfer an asset
     from an account to another. 
     
-    This subroutine can also be used to opt in an asset if ``amount``
-    is 0 and ``sender`` is equal to ``receiver``.
+    This subroutine can also be used to opt-in an asset if the ``amount`` is 0 and ``sender`` is equal to ``receiver``.
 
     :param Addr sender   : Asset sender
     :param Addr receiver : Asset receiver
@@ -368,7 +359,7 @@ def transferAsset(sender: Addr, receiver: Addr, assetId: Int, amount: Int) -> Ex
 ```
 
 #### 3.6.3 getAccountASABalance
-The ``getAccountASABalance`` can be used to get the balance of a specific asset for a specific wallet. It uses the ``AssetHolding.balance`` method to retrieve the balanace.
+The ``getAccountASABalance`` can be used to get the balance of a specific asset for a specific wallet. It uses the ``AssetHolding.balance`` method to retrieve the balance.
 
 ```python
 @Subroutine(TealType.uint64)
@@ -394,9 +385,9 @@ def getAccountASABalance(account: Addr, assetId: Int) -> TealType.uint64:
     ])
 ```
 #### 3.6.4 computeRoyaltyFee
-Last, but not least, we have the the ``computeRoyaltyFee`` subroutine. This subroutine computes the fee for a specific payment amount and a given royalty fee (in thousands). For example suppose one wants to set a royalty fee of 3.5%. In thousands is 35 (0.035 * 1000).
+Last, but not least, there's the ``computeRoyaltyFee`` subroutine. This subroutine computes the fee for a specific payment amount and a given royalty fee (in thousands). For example, suppose one wants to set a royalty fee of 3.5%. In thousands is 35 (0.035 * 1000).
 
-Given an amount ``x`` we need to compute ``x * 35 / 1000`` to compute the royalty fee. Since there may be a remainder, we also need to consider ``(x * 35) % 1000``. THe remainder will be used to round up the fee (if it is greater than 500 then we round up, otherwise we round down).
+Given an amount ``x`` its needed to compute ``x * 35 / 1000`` to compute the royalty fee. Since there may be a remaining amount, it's also necessary to consider ``(x * 35) % 1000``. The remainder will be used to round up the fee (if it is greater than 500 then its rounded up, otherwise rounded down).
 
 Read also the description of the subrotuine for more information.
 ```python
@@ -407,7 +398,7 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
     predefined ``royaltyFee``.
     The ``royaltyFee`` variable must be expressed in thousands.
 
-    Note that we assume that amount * royaltyFee will not overflow.
+    Note that its assumed that amount * royaltyFee will not overflow.
     In case it does, it will trigger an error and the transaction will
     fail.
 
@@ -422,47 +413,48 @@ def computeRoyaltyFee(amount: Int, royaltyFee: Int) -> TealType.uint64:
 
     # Computes the royalty fee. If the fee is equal to 0, or the amount is very small
     # the fee will be 0.
-    # If the royalty fee is larger or equal to 1000 then we return the original amount.
-    # If the remainder of royaltyFee * amount / 1000 is larger than 500 we round up the
-    # result and return  1 + royaltyFee * amount / 1000. Otherwise we just return
-    # royaltyFee * amount / 1000.
+    # If the royalty fee is larger or equal to 1000 then the original amount is returned.
+    # If the remainder of royaltyFee * amount / 1000 is larger than 500 it'll be rounded up and the
+    # 1 + royaltyFee * amount / 1000 is returned.
+    # Otherwise just royaltyFee * amount / 1000 is returned .
+    
     return If(Or(royaltyFee == Int(0), division == Int(0))).Then(Int(0))   \
            .ElseIf(royaltyFee >= Int(1000)).Then(amount)                   \
            .ElseIf(remainder > Int(500)).Then(division + Int(1))           \
            .Else(division)
 ```
 ### 3.7 Possible improvements and missing checks
-There ase several possible improvements that can be made. 
+Several possible improvements can be made. 
 
-1. First, note that the code is not production ready since it misses some checks that are needed to guarantee safety.
+1. First, note that the code is not production-ready since it misses some checks that are needed to guarantee safety.
 
-2. Secondly, the buyer may potentially pay for the asset, but never transfer it. This would freeze the total paid amount inside the contract. To solve this issue we can do the following:
+2. Secondly, the buyer may potentially pay for the asset, but never transfer it. This would freeze the total paid amount inside the contract. To solve this issue the following can be done:
     1. Impose that the executionTransfer must happen in a finite number of rounds
     2. Let the seller reset the payment if the transfer has not happened after that finite number of rounds.
 
-    Alternatively, we can just transfer immediately (after the payment) the asset to the buyer, without the need of confirming the transfer.
-3. We could also send the royalty fees immediately to the creator when the asset is transferred (by using another innerTransaction).
+    Alternatively, the asset can be transfered immediately (after the payment) to the buyer, without the need of confirming the transfer.
+3. The royalty fees can also be sent immediately to the creator when the asset is transferred (by using another innerTransaction).
 
 ## 4. Setting up an Example scenario
-We simulate an example scenario where we sell the asset 2 times. For this example we consider the simple scenario that the asset is an NFT.
-We need 3 wallets: 
+An example scenario can be simulated where owner sells the asset two times.
+Here 3 wallets are needed: 
 1. ``wallet1`` creator of the asset, and deployer of the smart contract (this is not strictly required!)
 2. ``wallet2`` First buyer
 3. ``wallet3`` Second buyer
 
-We proceed as follows
-1. We start by creating the Asset using ``wallet1``
+It proceeds as:
+1. Start by creating the Asset using ``wallet1``
 2. Deploy the smart contract using ``wallet1``
 3. ``wallet1`` puts the NFT up for sale and ``wallet2`` buys it
 4. ``wallet2`` puts the NFT up for sale and ``wallet3`` buys it
-5. Finally, we redeem the fees using ``wallet1``
+5. Finally, the fees are redeemed using ``wallet1``
 
-We assume that there exist the variables ``$WALLET1_ADDR``, ``$WALLET2_ADDR`` and ``$WALLET3_ADDR``. Each one of these variables contains the corresponding wallet's address (note that if you source the script file in ``scripts/start_network.sh`` it will automatically set up all the variables for you).
+Its assumed that there exist the variables ``$WALLET1_ADDR``, ``$WALLET2_ADDR`` and ``$WALLET3_ADDR``. Each one of these variables contains the corresponding wallet's address (note that if you source the script file in ``scripts/start_network.sh`` it will automatically set up all the variables for you).
 
 ### 4.1 Creating the asset
-We start by creating the asset (note that the asset is initially frozen).
+lets start by creating the asset (note that the asset is initially frozen).
 
-We also save the asset id variable in ``$ASSET_ID`` and make ``wallet2`` and ``wallet3`` opt-in the asset.
+The asset id is also stored in ``$ASSET_ID`` and make ``wallet2`` and ``wallet3`` opt-in the asset.
 
 ```python
 # Create the asset
@@ -476,7 +468,7 @@ goal asset send --amount 0 --to $WALLET2_ADDR --from $WALLET2_ADDR --assetid $AS
 goal asset send --amount 0 --to $WALLET3_ADDR --from $WALLET3_ADDR --assetid $ASSET_ID
 ```
 ### 4.2 Creating the App and setting the clawback address
-Now we deploy the smart contract using ``wallet1``, and make all the wallets opt-in the app.
+Now lets deploy the smart contract using ``wallet1``, and make all the wallets opt-in the app.
 
 ```python
 # Royalty fee 3.5%, in thousands
@@ -524,9 +516,9 @@ goal app optin --app-id $APP_ID --from $WALLET3_ADDR
 
 
 ### 4.3 Simulate sale from ``wallet1`` to ``wallet2``
-Here we simulate the sale from ``wallet1`` to ``wallet2``. 
+Here the sale from ``wallet1`` to ``wallet2`` is simulated. 
 
-We first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. We must pass 3 arguments: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` command.
+Lets first fix a price and amount, and call the ``setupSale`` method using ``wallet1``. 3 arguments are passed: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, the asset id must be specified using the ``--foreign-asset`` command.
 
 
 ```python
@@ -535,9 +527,9 @@ NFT_PRICE=1000000
 goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
 ```
 
-Now we pay the contract using ``wallet2``. We need to make a group transaction:
-1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
-2. The second transaction is a payment. We pay directly the contract the total amount.
+Now lets pay the contract using ``wallet2`` by make a group transaction:
+1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, the asset id need to be specified using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
+2. The second transaction is a payment. The total amount is paid directly the contract.
 
 
 ```python
@@ -560,17 +552,17 @@ Now ``wallet2`` has paid the smart contract. It can still  get a refund by calli
 goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:executeTransfer --app-account $WALLET1_ADDR --foreign-asset $ASSET_ID
 ```
 
-We can now verify that ``wallet2`` owns the asset
+Now it can be verified that ``wallet2`` owns the asset
 ```python
 goal account info -a $WALLET2_ADDR
 ```
 
-Whereas we can verify the global state of the app to check the amount of collected fees
+Whereas the global state of the app can be verified to check the collected fees
 ```python
 goal app read --global --app-id $APP_ID
 ```
 
-And we can see that the collected fees are
+And collected fees would be as
 ```python
  "collectedFees": {
     "tt": 2,
@@ -582,25 +574,25 @@ which is the correct amount, since the price is ``1000000``, the service cost is
 (Note that the service cost is 2000 because the smart contract has to do 2 transactions).
 
 
-Alternatively, ``wallet2`` can get a refund by executing the following command (we need to specify the seller's address using the ``-app-account`` flag).
+Alternatively, ``wallet2`` can get a refund by executing the following command (the seller's address needs to be specified using the ``-app-account`` flag).
 
 ```python
 goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:refund --app-account $WALLET1_ADDR
 ```
 
 ### 4.4 Simulate sale from ``wallet2`` to ``wallet3``
-Now we simulate the sale from ``wallet2`` to ``wallet3``. 
+Now lets simulate the sale from ``wallet2`` to ``wallet3``. 
 
-Again, we  call the ``setupSale`` method using ``wallet2``. We must pass 3 arguments: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` command.
+Again, the ``setupSale`` method is called using ``wallet2``. 3 arguments must be passed: (1) ``setupSale``, (2) the price, (3) the amount. Moreover, its also requierd to specify the asset id using the ``--foreign-asset`` command.
 
-We use the same parameters as before for simplicity.
+Same parameters are used as before for simplicity.
 ```python
 goal app call --app-id $APP_ID --from $WALLET2_ADDR --app-arg str:setupSale --app-arg int:$NFT_PRICE --app-arg int:$NFT_AMOUNT --foreign-asset $ASSET_ID
 ```
 
-Now we pay the contract using ``wallet3``. We need to make a group transaction:
-1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, we also need to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
-2. The second transaction is a payment. We pay directly the contract the total amount.
+Now lets pay the contract using ``wallet3`` by means of a group transaction:
+1. The first transaction calls the ``buyASA`` method in the contract. There are 3 arguments: (1) ``setupSale``, (2) the asset idi, (3) the amount. Moreover, its also required to specify the asset id using the ``--foreign-asset`` flag and the seller's account using the ``--app-account`` flag.
+2. The second transaction is payment of total amount, directly to the contract.
 
 
 ```python
@@ -616,7 +608,7 @@ goal clerk group -i buyCombinedTxns.tx -o buyGroupedTxns.tx
 goal clerk sign -i buyGroupedTxns.tx -o signoutbuy.tx
 goal clerk rawsend -f signoutbuy.tx
 ```
-Now ``wallet3`` has paid the smart contract. It can still  get a refund by calling the ``refund`` method, or finalize the transaction by calling the ``executeTransfer`` method.
+Now ``wallet3`` has paid the smart contract. It can still get a refund by calling the ``refund`` method, or finalize the transaction by calling the ``executeTransfer`` method.
 
 ``wallet3`` can finalize the transaction by executing the following command
 
@@ -624,11 +616,11 @@ Now ``wallet3`` has paid the smart contract. It can still  get a refund by calli
 goal app call --app-id $APP_ID --from $WALLET3_ADDR --app-arg str:executeTransfer --app-account $WALLET2_ADDR --foreign-asset $ASSET_ID
 ```
 
-We can now verify that ``wallet3`` owns the asset using the command ``goal account info -a $WALLET3_ADDR``
+Now code verifies that ``wallet3`` owns the asset using the command ``goal account info -a $WALLET3_ADDR``
 
-We can also verify the global state of the app to check the amount of collected fees using the command``goal app read --global --app-id $APP_ID``
+It's also verified that the global state of the app to check the amount of collected fees using the command``goal app read --global --app-id $APP_ID``
 
-And we can see that the collected fees are
+And collected fees would be as
 ```python
  "collectedFees": {
     "tt": 2,
@@ -642,7 +634,6 @@ which is the correct amount. The creator (``wallet1``) can reclaim the fees usin
 goal app call --app-id $APP_ID --from $WALLET1_ADDR --app-arg str:claimFees
 ```
 
-
 ## 5. Running the example script
 You can also run the example scenario by executing the script in ``src/example.ts``. To run the script:
 
@@ -652,6 +643,6 @@ You can also run the example scenario by executing the script in ``src/example.t
 
 
 ## 6. Conclusions
-In this guide we have seen how to guarantee royalty fees using PyTeal (and Teal v5). Thanks to the functionalities provided by [InnerTransactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) we are now able to better automate transactions using smart contracts in Algorand. In the future I expect royalty fees to be standardized, and perhaps have a corresponding [ARC](https://github.com/algorandfoundation/ARCs/).
+In this guide, it is shown how to guarantee royalty fees using PyTeal (for Teal v5). Thanks to [Inner Transactions](https://developer.algorand.org/docs/get-details/dapps/avm/teal/specification/#inner-transactions) functionality, it's now possible to streamline transactions more efficiently using smart contracts on Algorand. In the future, it is expected for royalty fees to be standardized, and perhaps have a corresponding [ARC](https://github.com/algorandfoundation/ARCs/).
 
 Thanks for reading!
