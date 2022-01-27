@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Check if goal available
+if ! command -v goal &> /dev/null
+then
+  echo goal not found. Please install goal and try again
+  exit
+fi
+
 
 SCRIPTS_PATH="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 export NETWORK_FOLDER="$SCRIPTS_PATH/network_data"
