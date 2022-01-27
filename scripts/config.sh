@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# Check if goal available
+if ! command -v goal &> /dev/null
+then
+  echo goal not found. Please install goal and try again
+  exit
+fi
+
 echo -e "\e[1;31mAlgorand Royalty Fees Tutorial\e[0m"
 
 set -e
