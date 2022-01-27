@@ -1,11 +1,10 @@
 #!/bin/bash
 
 # Check if goal available
-if ! command -v goal &> /dev/null
+if ! command -v goal >/dev/null 2>&1
 then
   echo goal not found. Please install goal and try again
-  exit
-fi
+else
 
 
 SCRIPTS_PATH="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -62,3 +61,4 @@ goal clerk send -a 200000000 -f $NODE1_ADDRESS -t $WALLET3_ADDR -d $NETWORK_FOLD
 
 export ALGORAND_DATA="$NETWORK_FOLDER/Node1"
 echo -e "\e[1;31mNetwork created\e[0m"
+fi
