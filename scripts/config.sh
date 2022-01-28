@@ -1,4 +1,11 @@
 #!/bin/bash
+
+# Check if goal available
+if ! command -v goal >/dev/null 2>&1
+then
+  echo goal not found. Please install goal and try again
+else
+
 echo -e "\e[1;31mAlgorand Royalty Fees Tutorial\e[0m"
 
 set -e
@@ -74,5 +81,4 @@ echo -e "\e[1;32mSetting clawback to asset\e[0m"
 ${gcmd} asset config --assetid $ASSET_ID --manager $WALLET1_ADDR --new-clawback $APP_ADDRESS --new-freezer $APP_ADDRESS --new-manager "" 
 
 set +e
-
-
+fi
